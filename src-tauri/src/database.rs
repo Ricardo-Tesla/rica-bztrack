@@ -95,5 +95,38 @@ pub fn get_migrations() -> Vec<Migration> {
             ",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 6,
+            description: "create_expenses_table",
+            sql: "
+                CREATE TABLE IF NOT EXISTS expenses (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    description TEXT NOT NULL,
+                    category    TEXT NOT NULL,
+                    amount      REAL NOT NULL DEFAULT 0,
+                    date        TEXT NOT NULL,
+                    created_at  TEXT DEFAULT (datetime('now'))
+                );
+            ",
+            kind: MigrationKind::Up,
+        },
+        Migration {
+            version: 7,
+            description: "create_transactions_table",
+            sql: "
+                CREATE TABLE IF NOT EXISTS transactions (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    description  TEXT NOT NULL,
+                    type         TEXT NOT NULL,
+                    category     TEXT NOT NULL,
+                    amount       REAL NOT NULL DEFAULT 0,
+                    payment_method TEXT DEFAULT 'Cash',
+                    reference_id INTEGER,
+                    date         TEXT NOT NULL,
+                    created_at   TEXT DEFAULT (datetime('now'))
+                );
+            ",
+            kind: MigrationKind::Up,
+        },
     ]
 }
