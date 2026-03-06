@@ -128,5 +128,28 @@ pub fn get_migrations() -> Vec<Migration> {
             ",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 8,
+            description: "create_stock_movements_table",
+            sql: "
+                CREATE TABLE IF NOT EXISTS stock_movements (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    product_id   INTEGER NOT NULL,
+                    product_name TEXT NOT NULL,
+                    type         TEXT NOT NULL,
+                    quantity     INTEGER NOT NULL,
+                    unit_cost    REAL DEFAULT 0,
+                    total_cost   REAL DEFAULT 0,
+                    supplier_id  INTEGER,
+                    supplier_name TEXT,
+                    note         TEXT,
+                    date         TEXT NOT NULL,
+                    created_at   TEXT DEFAULT (datetime('now')),
+                    FOREIGN KEY (product_id) REFERENCES products(id),
+                    FOREIGN KEY (supplier_id) REFERENCES suppliers(id)
+                );
+                ",
+                kind: MigrationKind::Up,
+        },
     ]
 }

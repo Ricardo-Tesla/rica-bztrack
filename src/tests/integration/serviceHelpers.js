@@ -168,3 +168,78 @@ export function getExpensesFromDb(db) {
 export function getTransactionsFromDb(db) {
     return db.prepare('SELECT * FROM transactions ORDER BY created_at DESC').all()
 }
+
+// ── RESTOCK HELPERS ──────────────────────────────
+export function restockProductInDb(db, restock) {
+  const newQuantity = parseInt(restock.quantity)
+  const newUnitCost = parseFloat(restock.unit_cost) || 0
+  const totalCost = newUnitCost * newQuantity
+
+  // Get current stock and buy price
+  const current = db.prepare(
+    'SELECT stock, buy_price FROM products WHERE id = ?'
+  ).get(restock.product_id)
+
+  const currentStock = parseInt(current.stock) || 0
+  const currentBuyPrice = parseFloat(current.buy_price) || 0
+
+  // Weighted average cost
+  let newAverageCost = currentBuyPrice
+  if (newUnitCost > 0) {
+    const totalUnits = currentStock + newQuantity
+    const totalValue = (currentStock * currentBuyPrice) + (newQuantity * newUnitCost)
+    newAverageCost = totalUnits > 0 ? totalValue / totalUnits : newUnitCost
+    newAverageCost = parseFloat(newAverageCost.toFixed(2))
+  }
+
+  // Update stock and average buy price
+  db.prepare(
+    'UPDATE products SET stock = stock + ?, buy_price = ? WHERE id = ?'
+  ).run(newQuantity, newAverageCost, restock.product_id)
+
+  // Record stock movement
+  db.prepare(`
+    INSERT INTO stock_movements
+    (product_id, product_name, type, quantity, unit_cost, total_cost, supplier_id, supplier_name, note, date)
+    VALUES (?, ?, 'restock', ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    restock.product_id,
+    restock.product_name,
+    newQuantity,
+    newUnitCost,
+    totalCost,
+    restock.supplier_id || null,
+    restock.supplier_name || null,
+    restock.note || null,
+    restock.date
+  )
+
+  // Record expense and transaction if cost provided
+  if (totalCost > 0) {
+    const description = `Restock — ${restock.product_name} (${newQuantity} units @ $${newUnitCost})`
+
+    const expResult = db.prepare(
+      `INSERT INTO expenses (description, category, amount, date)
+       VALUES (?, 'Stock Purchase', ?, ?)`
+    ).run(description, totalCost, restock.date)
+
+    db.prepare(`
+      INSERT INTO transactions
+      (description, type, category, amount, payment_method, reference_id, date)
+      VALUES (?, 'expense', 'Stock Purchase', ?, ?, ?, ?)
+    `).run(description, totalCost, restock.payment_method || 'Cash', expResult.lastInsertRowid, restock.date)
+  }
+
+  return { success: true, totalCost, newAverageCost }
+}
+
+export function getStockMovementsFromDb(db, productId = null) {
+  if (productId) {
+    return db.prepare(
+      'SELECT * FROM stock_movements WHERE product_id = ? ORDER BY created_at DESC'
+    ).all(productId)
+  }
+  return db.prepare(
+    'SELECT * FROM stock_movements ORDER BY created_at DESC'
+  ).all()
+}

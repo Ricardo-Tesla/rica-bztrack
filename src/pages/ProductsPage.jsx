@@ -1,14 +1,22 @@
 import { useEffect, useState } from 'react'
 import { getProducts, addProduct, updateProduct, deleteProduct } from '../services/productService'
 import { getSuppliers } from '../services/supplierService'
+import { restockProduct, getStockMovements } from '../services/restockService'
 
 const CATEGORIES = ['Electronics', 'Clothing', 'Food', 'Hardware', 'Furniture', 'Other']
 const UNITS = ['Piece', 'Kg', 'Litre', 'Box', 'Pack', 'Dozen']
+const PAYMENT_METHODS = ['Cash', 'Card', 'Mobile Money', 'Bank Transfer']
 
 const emptyForm = {
   name: '', sku: '', category: 'Other', unit: 'Piece',
   buy_price: '', sell_price: '', stock: '', low_stock_alert: '5',
   supplier_id: ''
+}
+
+const emptyRestock = {
+  quantity: '', unit_cost: '', supplier_id: '',
+  supplier_name: '', payment_method: 'Cash',
+  note: '', date: new Date().toISOString().split('T')[0]
 }
 
 export default function ProductsPage() {
@@ -21,6 +29,15 @@ export default function ProductsPage() {
   const [editingProduct, setEditingProduct] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [search, setSearch] = useState('')
+
+  // Restock state
+  const [showRestockModal, setShowRestockModal] = useState(false)
+  const [restockingProduct, setRestockingProduct] = useState(null)
+  const [restockSaving, setRestockSaving] = useState(false)
+  const [restockError, setRestockError] = useState('')
+  const [restockForm, setRestockForm] = useState(emptyRestock)
+  const [stockMovements, setStockMovements] = useState([])
+  const [showMovements, setShowMovements] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
@@ -61,6 +78,25 @@ export default function ProductsPage() {
     setShowModal(true)
   }
 
+  function openRestockModal(product) {
+    setRestockingProduct(product)
+    setRestockForm({
+      ...emptyRestock,
+      unit_cost: product.buy_price || '',
+      supplier_id: product.supplier_id || '',
+      supplier_name: suppliers.find(s => s.id == product.supplier_id)?.name || ''
+    })
+    setRestockError('')
+    setShowRestockModal(true)
+  }
+
+  async function openMovementsModal(product) {
+    const movements = await getStockMovements(product.id)
+    setStockMovements(movements)
+    setRestockingProduct(product)
+    setShowMovements(true)
+  }
+
   async function handleSave() {
     if (!form.name.trim()) { setError('Product name is required'); return }
     if (!form.sku.trim()) { setError('SKU is required'); return }
@@ -92,6 +128,28 @@ export default function ProductsPage() {
     }
   }
 
+  async function handleRestock() {
+    if (!restockForm.quantity || parseInt(restockForm.quantity) <= 0) {
+      setRestockError('Valid quantity is required'); return
+    }
+    if (!restockForm.date) { setRestockError('Date is required'); return }
+    try {
+      setRestockSaving(true)
+      setRestockError('')
+      await restockProduct({
+        ...restockForm,
+        product_id: restockingProduct.id,
+        product_name: restockingProduct.name,
+      })
+      setShowRestockModal(false)
+      await loadData()
+    } catch (err) {
+      setRestockError('Failed to restock product')
+    } finally {
+      setRestockSaving(false)
+    }
+  }
+
   function getStockStatus(product) {
     if (product.stock <= 0) return { label: 'Out of Stock', class: 'bg-red-950 text-red-400 border border-red-800' }
     if (product.stock <= product.low_stock_alert) return { label: 'Low Stock', class: 'bg-yellow-950 text-yellow-400 border border-yellow-800' }
@@ -99,7 +157,7 @@ export default function ProductsPage() {
   }
 
   function getMargin(buy, sell) {
-    if (!buy || !sell || buy === 0) return null
+    if (!buy || !sell || sell === 0) return null
     return (((sell - buy) / sell) * 100).toFixed(1)
   }
 
@@ -216,6 +274,18 @@ export default function ProductsPage() {
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-2 justify-end">
                         <button
+                          onClick={() => openMovementsModal(p)}
+                          className="text-gray-400 hover:text-gray-300 text-xs border border-gray-700 hover:border-gray-500 px-3 py-1.5 rounded-lg transition"
+                        >
+                          History
+                        </button>
+                        <button
+                          onClick={() => openRestockModal(p)}
+                          className="text-green-400 hover:text-green-300 text-xs border border-green-900 hover:border-green-700 px-3 py-1.5 rounded-lg transition"
+                        >
+                          Restock
+                        </button>
+                        <button
                           onClick={() => openEditModal(p)}
                           className="text-yellow-400 hover:text-yellow-300 text-xs border border-yellow-800 hover:border-yellow-600 px-3 py-1.5 rounded-lg transition"
                         >
@@ -239,7 +309,9 @@ export default function ProductsPage() {
         {/* Footer */}
         {filtered.length > 0 && (
           <div className="px-5 py-3 border-t border-gray-800 bg-gray-900 flex items-center justify-between">
-            <span className="text-xs text-gray-500">{filtered.length} product{filtered.length !== 1 ? 's' : ''} found</span>
+            <span className="text-xs text-gray-500">
+              {filtered.length} product{filtered.length !== 1 ? 's' : ''} found
+            </span>
             <span className="text-xs text-gray-500">
               Total inventory value: <span className="text-yellow-400 font-semibold">
                 ${products.reduce((a, p) => a + (p.buy_price * p.stock), 0).toFixed(2)}
@@ -249,12 +321,10 @@ export default function ProductsPage() {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Add/Edit Product Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-7 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
-
-            {/* Modal Header */}
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-yellow-400">
                 {editingProduct ? 'Edit Product' : 'Add Product'}
@@ -266,17 +336,12 @@ export default function ProductsPage() {
                 ✕
               </button>
             </div>
-
-            {/* Error */}
             {error && (
               <div className="bg-red-950 border border-red-700 text-red-300 px-4 py-2 rounded-lg mb-4 text-sm">
                 {error}
               </div>
             )}
-
-            {/* Form */}
             <div className="grid grid-cols-2 gap-4">
-
               <div className="col-span-2">
                 <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Product Name *</label>
                 <input
@@ -286,7 +351,6 @@ export default function ProductsPage() {
                   onChange={e => setForm({ ...form, name: e.target.value })}
                 />
               </div>
-
               <div>
                 <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">SKU / Code *</label>
                 <input
@@ -296,7 +360,6 @@ export default function ProductsPage() {
                   onChange={e => setForm({ ...form, sku: e.target.value })}
                 />
               </div>
-
               <div>
                 <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Category</label>
                 <select
@@ -307,7 +370,6 @@ export default function ProductsPage() {
                   {CATEGORIES.map(c => <option key={c}>{c}</option>)}
                 </select>
               </div>
-
               <div>
                 <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Unit</label>
                 <select
@@ -318,57 +380,46 @@ export default function ProductsPage() {
                   {UNITS.map(u => <option key={u}>{u}</option>)}
                 </select>
               </div>
-
               <div>
-                <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Buy Price (Cost) *</label>
+                <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Buy Price *</label>
                 <input
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="number" min="0" step="0.01"
                   className="w-full bg-gray-800 border border-gray-700 focus:border-yellow-400 rounded-lg px-3 py-2.5 text-sm outline-none text-white transition"
                   placeholder="0.00"
                   value={form.buy_price}
                   onChange={e => setForm({ ...form, buy_price: e.target.value })}
                 />
               </div>
-
               <div>
                 <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Sell Price *</label>
                 <input
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="number" min="0" step="0.01"
                   className="w-full bg-gray-800 border border-gray-700 focus:border-yellow-400 rounded-lg px-3 py-2.5 text-sm outline-none text-white transition"
                   placeholder="0.00"
                   value={form.sell_price}
                   onChange={e => setForm({ ...form, sell_price: e.target.value })}
                 />
               </div>
-
               <div>
                 <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Initial Stock</label>
                 <input
-                  type="number"
-                  min="0"
+                  type="number" min="0"
                   className="w-full bg-gray-800 border border-gray-700 focus:border-yellow-400 rounded-lg px-3 py-2.5 text-sm outline-none text-white transition"
                   placeholder="0"
                   value={form.stock}
                   onChange={e => setForm({ ...form, stock: e.target.value })}
                 />
               </div>
-
               <div>
                 <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Low Stock Alert</label>
                 <input
-                  type="number"
-                  min="0"
+                  type="number" min="0"
                   className="w-full bg-gray-800 border border-gray-700 focus:border-yellow-400 rounded-lg px-3 py-2.5 text-sm outline-none text-white transition"
                   placeholder="5"
                   value={form.low_stock_alert}
                   onChange={e => setForm({ ...form, low_stock_alert: e.target.value })}
                 />
               </div>
-
               <div className="col-span-2">
                 <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Supplier (optional)</label>
                 <select
@@ -382,7 +433,6 @@ export default function ProductsPage() {
                   ))}
                 </select>
               </div>
-
             </div>
 
             {/* Live Margin Preview */}
@@ -396,7 +446,6 @@ export default function ProductsPage() {
               </div>
             )}
 
-            {/* Footer */}
             <div className="flex gap-3 justify-end mt-6">
               <button
                 onClick={() => { setShowModal(false); setError('') }}
@@ -412,7 +461,208 @@ export default function ProductsPage() {
                 {saving ? 'Saving...' : editingProduct ? 'Update Product' : 'Save Product'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
 
+      {/* Restock Modal */}
+      {showRestockModal && restockingProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-7 w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xl font-bold text-yellow-400">Restock Product</h2>
+              <button
+                onClick={() => setShowRestockModal(false)}
+                className="text-gray-500 hover:text-gray-300 text-xl leading-none transition"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 mb-5">
+              <div className="text-sm font-semibold text-white">{restockingProduct.name}</div>
+              <div className="text-xs text-gray-400 mt-0.5">
+                Current stock:
+                <span className="text-yellow-400 font-semibold ml-1">
+                  {restockingProduct.stock} {restockingProduct.unit}
+                </span>
+              </div>
+            </div>
+            {restockError && (
+              <div className="bg-red-950 border border-red-700 text-red-300 px-4 py-2 rounded-lg mb-4 text-sm">
+                {restockError}
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Quantity to Add *</label>
+                <input
+                  type="number" min="1"
+                  className="w-full bg-gray-800 border border-gray-700 focus:border-yellow-400 rounded-lg px-3 py-2.5 text-sm outline-none text-white transition"
+                  placeholder="e.g. 50"
+                  value={restockForm.quantity}
+                  onChange={e => setRestockForm({ ...restockForm, quantity: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Unit Cost</label>
+                <input
+                  type="number" min="0" step="0.01"
+                  className="w-full bg-gray-800 border border-gray-700 focus:border-yellow-400 rounded-lg px-3 py-2.5 text-sm outline-none text-white transition"
+                  placeholder="0.00"
+                  value={restockForm.unit_cost}
+                  onChange={e => setRestockForm({ ...restockForm, unit_cost: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Supplier</label>
+                <select
+                  className="w-full bg-gray-800 border border-gray-700 focus:border-yellow-400 rounded-lg px-3 py-2.5 text-sm outline-none text-white transition"
+                  value={restockForm.supplier_id}
+                  onChange={e => {
+                    const s = suppliers.find(s => s.id == e.target.value)
+                    setRestockForm({ ...restockForm, supplier_id: e.target.value, supplier_name: s ? s.name : '' })
+                  }}
+                >
+                  <option value="">No Supplier</option>
+                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Payment Method</label>
+                <select
+                  className="w-full bg-gray-800 border border-gray-700 focus:border-yellow-400 rounded-lg px-3 py-2.5 text-sm outline-none text-white transition"
+                  value={restockForm.payment_method}
+                  onChange={e => setRestockForm({ ...restockForm, payment_method: e.target.value })}
+                >
+                  {PAYMENT_METHODS.map(m => <option key={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Date *</label>
+                <input
+                  type="date"
+                  className="w-full bg-gray-800 border border-gray-700 focus:border-yellow-400 rounded-lg px-3 py-2.5 text-sm outline-none text-white transition"
+                  value={restockForm.date}
+                  onChange={e => setRestockForm({ ...restockForm, date: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Note</label>
+                <input
+                  className="w-full bg-gray-800 border border-gray-700 focus:border-yellow-400 rounded-lg px-3 py-2.5 text-sm outline-none text-white transition"
+                  placeholder="Optional note"
+                  value={restockForm.note}
+                  onChange={e => setRestockForm({ ...restockForm, note: e.target.value })}
+                />
+              </div>
+            </div>
+
+            {/* Total Cost Preview */}
+            {restockForm.quantity && restockForm.unit_cost && (
+              <div className="mt-4 bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">Total restock cost</span>
+                  <span className="text-red-400 font-bold text-sm">
+                    ${(parseFloat(restockForm.unit_cost) * parseInt(restockForm.quantity || 0)).toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">New average buy price</span>
+                  <span className="text-yellow-400 font-bold text-sm">
+                    ${(() => {
+                      const currentStock = restockingProduct.stock || 0
+                      const currentPrice = restockingProduct.buy_price || 0
+                      const newQty = parseInt(restockForm.quantity) || 0
+                      const newPrice = parseFloat(restockForm.unit_cost) || 0
+                      const totalUnits = currentStock + newQty
+                      const totalValue = (currentStock * currentPrice) + (newQty * newPrice)
+                      return totalUnits > 0 ? (totalValue / totalUnits).toFixed(2) : newPrice.toFixed(2)
+                    })()}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-3 justify-end mt-6">
+              <button
+                onClick={() => { setShowRestockModal(false); setRestockError('') }}
+                className="border border-gray-700 hover:border-gray-500 text-gray-300 hover:text-white px-5 py-2 rounded-lg text-sm transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRestock}
+                disabled={restockSaving}
+                className="bg-green-500 hover:bg-green-400 disabled:opacity-50 text-black font-bold px-6 py-2 rounded-lg text-sm transition"
+              >
+                {restockSaving ? 'Saving...' : '+ Add Stock'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stock Movements Modal */}
+      {showMovements && restockingProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-7 w-full max-w-lg shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-yellow-400">Stock History</h2>
+                <p className="text-gray-400 text-xs mt-0.5">{restockingProduct.name}</p>
+              </div>
+              <button
+                onClick={() => setShowMovements(false)}
+                className="text-gray-500 hover:text-gray-300 text-xl leading-none transition"
+              >
+                ✕
+              </button>
+            </div>
+            {stockMovements.length === 0 ? (
+              <div className="text-center py-10 text-gray-500">
+                <div className="text-4xl mb-3">📦</div>
+                <div className="text-sm">No stock movements yet</div>
+              </div>
+            ) : (
+              <div className="overflow-y-auto max-h-96">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-800">
+                      <th className="text-left px-3 py-3 text-gray-400 text-xs uppercase tracking-wide">Type</th>
+                      <th className="text-left px-3 py-3 text-gray-400 text-xs uppercase tracking-wide">Qty</th>
+                      <th className="text-left px-3 py-3 text-gray-400 text-xs uppercase tracking-wide">Unit Cost</th>
+                      <th className="text-left px-3 py-3 text-gray-400 text-xs uppercase tracking-wide">Total</th>
+                      <th className="text-left px-3 py-3 text-gray-400 text-xs uppercase tracking-wide">Supplier</th>
+                      <th className="text-left px-3 py-3 text-gray-400 text-xs uppercase tracking-wide">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stockMovements.map((m, i) => (
+                      <tr key={i} className="border-b border-gray-800 hover:bg-gray-800 transition">
+                        <td className="px-3 py-3">
+                          <span className="text-xs bg-green-950 text-green-400 border border-green-800 px-2 py-0.5 rounded-full font-semibold">
+                            {m.type}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-green-400 font-bold">+{m.quantity}</td>
+                        <td className="px-3 py-3 text-gray-300">${parseFloat(m.unit_cost).toFixed(2)}</td>
+                        <td className="px-3 py-3 text-red-400 font-semibold">${parseFloat(m.total_cost).toFixed(2)}</td>
+                        <td className="px-3 py-3 text-gray-400 text-xs">{m.supplier_name || '—'}</td>
+                        <td className="px-3 py-3 text-gray-400 text-xs">{m.date}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setShowMovements(false)}
+                className="bg-yellow-400 hover:bg-yellow-300 text-black font-bold px-6 py-2 rounded-lg text-sm transition"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
