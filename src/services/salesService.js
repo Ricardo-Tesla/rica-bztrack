@@ -8,7 +8,7 @@ function generateReceiptNumber() {
   return `RCT-${date}-${time}`
 }
 
-// Complete a sale — saves sale + items + deducts stock
+// Complete a sale — saves sale + items + deducts stock + logs transaction
 export async function completeSale(cart, customer, paymentMethod) {
   const db = await getDb()
 
@@ -30,7 +30,6 @@ export async function completeSale(cart, customer, paymentMethod) {
 
   // Insert each sale item and deduct stock
   for (const item of cart) {
-    // Save sale item — snapshot prices at time of sale
     await db.execute(
       `INSERT INTO sale_items
        (sale_id, product_id, product_name, quantity, unit_price, buy_price, subtotal)
@@ -46,12 +45,25 @@ export async function completeSale(cart, customer, paymentMethod) {
       ]
     )
 
-    // Deduct stock from product
+    // Deduct stock
     await db.execute(
       'UPDATE products SET stock = stock - ? WHERE id = ?',
       [item.quantity, item.id]
     )
   }
+
+  // Auto log as income transaction
+  await db.execute(
+    `INSERT INTO transactions
+     (description, type, category, amount, payment_method, reference_id, date)
+     VALUES (?, 'income', 'Sales', ?, ?, ?, DATE('now'))`,
+    [
+      `Sale #${receiptNumber} — ${customerName}`,
+      total,
+      paymentMethod,
+      saleId,
+    ]
+  )
 
   return { saleId, receiptNumber, total, customerName }
 }
