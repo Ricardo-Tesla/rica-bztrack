@@ -11,8 +11,11 @@
     "fs:default",
     "fs:allow-write-text-file",
     "fs:allow-write-file",
+    "fs:allow-read-file",
+    "fs:allow-copy-file",
     "fs:scope-download-recursive",
     "fs:scope-document-recursive",
+    "fs:scope-appdata-recursive",
     "dialog:default",
     "dialog:allow-save"
   ]

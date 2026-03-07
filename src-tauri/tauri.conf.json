@@ -1,13 +1,10 @@
 {
-  "$schema": "https://schema.tauri.app/config/2",
   "productName": "Rica BizTrack",
-  "version": "0.1.0",
-  "identifier": "com.tauri.dev",
+  "version": "1.0.0",
+  "identifier": "com.ricabiztrack.app",
   "build": {
     "frontendDist": "../dist",
-    "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "devUrl": "http://localhost:5173"
   },
   "app": {
     "windows": [
@@ -15,8 +12,11 @@
         "title": "Rica BizTrack",
         "width": 1280,
         "height": 800,
+        "minWidth": 1024,
+        "minHeight": 700,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "center": true
       }
     ],
     "security": {
@@ -37,6 +37,14 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    },
+    "shortDescription": "Business management for small businesses",
+    "longDescription": "Rica BizTrack is a complete business management solution for small businesses. Manage inventory, sales, customers, expenses and generate profit and loss reports.",
+    "publisher": "Ricardo Tesla"
   }
 }
