@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getSales } from '../services/salesService'
+import { downloadReceipt } from '../utils/receiptPrinter'
 
 export default function SalesPage() {
   const [sales, setSales] = useState([])
@@ -167,13 +168,10 @@ export default function SalesPage() {
         <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-7 w-full max-w-md shadow-2xl">
 
-            {/* Modal Header */}
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-xl font-bold text-yellow-400">Sale Details</h2>
-                <p className="text-gray-400 text-xs mt-0.5">
-                  {selectedSale.receipt_number}
-                </p>
+                <p className="text-gray-400 text-xs mt-0.5">{selectedSale.receipt_number}</p>
               </div>
               <button
                 onClick={() => setSelectedSale(null)}
@@ -183,7 +181,6 @@ export default function SalesPage() {
               </button>
             </div>
 
-            {/* Sale Info */}
             <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 mb-4">
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-gray-400">Customer</span>
@@ -201,7 +198,6 @@ export default function SalesPage() {
               </div>
             </div>
 
-            {/* Items */}
             <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 mb-4">
               <div className="text-xs text-gray-400 uppercase tracking-wide mb-3">Items Purchased</div>
               {selectedSale.items?.map((item, i) => (
@@ -222,12 +218,20 @@ export default function SalesPage() {
               </div>
             </div>
 
-            <button
-              onClick={() => setSelectedSale(null)}
-              className="w-full bg-yellow-400 hover:bg-yellow-300 text-black font-bold py-2.5 rounded-lg transition text-sm"
-            >
-              Close
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={() => downloadReceipt(selectedSale)}
+                className="flex-1 border border-yellow-600 hover:border-yellow-400 text-yellow-400 hover:text-yellow-300 font-bold py-2.5 rounded-lg transition text-sm"
+              >
+                🖨️ Print Receipt
+              </button>
+              <button
+                onClick={() => setSelectedSale(null)}
+                className="flex-1 bg-yellow-400 hover:bg-yellow-300 text-black font-bold py-2.5 rounded-lg transition text-sm"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

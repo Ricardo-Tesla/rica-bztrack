@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getProducts } from '../services/productService'
 import { getCustomers } from '../services/customerService'
 import { completeSale } from '../services/salesService'
+import { downloadReceipt } from '../utils/receiptPrinter'
 
 const PAYMENT_METHODS = ['Cash', 'Card', 'Mobile Money', 'Bank Transfer']
 
@@ -32,7 +33,6 @@ export default function POSPage() {
     }
   }
 
-  // ── Cart Operations ──────────────────────────────
   function addToCart(product) {
     if (product.stock <= 0) return
     const existing = cart.find(i => i.id === product.id)
@@ -63,18 +63,21 @@ export default function POSPage() {
     setPaymentMethod('Cash')
   }
 
-  // ── Calculations ─────────────────────────────────
   const subtotal = cart.reduce((a, i) => a + i.sell_price * i.quantity, 0)
   const total = subtotal
 
-  // ── Complete Sale ────────────────────────────────
   async function handleCompleteSale() {
     if (!cart.length) { setError('Cart is empty'); return }
     try {
       setCompleting(true)
       setError('')
       const result = await completeSale(cart, selectedCustomer, paymentMethod)
-      setReceipt({ ...result, items: cart, paymentMethod })
+      setReceipt({
+        ...result,
+        items: cart,
+        paymentMethod,
+        created_at: new Date().toISOString()
+      })
       clearCart()
       await loadData()
     } catch (err) {
@@ -82,6 +85,25 @@ export default function POSPage() {
     } finally {
       setCompleting(false)
     }
+  }
+
+  function handlePrintReceipt() {
+    downloadReceipt({
+      receipt_number: receipt.receiptNumber,
+      customer_name: receipt.customerName,
+      payment_method: receipt.paymentMethod,
+      created_at: receipt.created_at,
+      subtotal: receipt.total,
+      total: receipt.total,
+      tax: 0,
+      discount: 0,
+      items: receipt.items.map(i => ({
+        product_name: i.name,
+        quantity: i.quantity,
+        unit_price: i.sell_price,
+        subtotal: i.sell_price * i.quantity
+      }))
+    })
   }
 
   const filtered = products.filter(p =>
@@ -115,7 +137,6 @@ export default function POSPage() {
             onChange={e => setSearch(e.target.value)}
             className="bg-gray-900 border border-gray-700 focus:border-yellow-400 rounded-lg px-4 py-2.5 text-sm outline-none text-white mb-4 transition"
           />
-
           {loading ? (
             <div className="flex-1 flex items-center justify-center text-gray-500">
               <div className="animate-pulse">Loading products...</div>
@@ -163,7 +184,6 @@ export default function POSPage() {
         {/* RIGHT — Cart */}
         <div className="w-80 flex flex-col bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
 
-          {/* Cart Header */}
           <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
             <h2 className="font-bold text-white">
               🛒 Cart
@@ -174,16 +194,12 @@ export default function POSPage() {
               )}
             </h2>
             {cart.length > 0 && (
-              <button
-                onClick={clearCart}
-                className="text-xs text-gray-500 hover:text-red-400 transition"
-              >
+              <button onClick={clearCart} className="text-xs text-gray-500 hover:text-red-400 transition">
                 Clear
               </button>
             )}
           </div>
 
-          {/* Cart Items */}
           <div className="flex-1 overflow-y-auto px-4 py-3">
             {cart.length === 0 ? (
               <div className="text-center py-12 text-gray-600">
@@ -208,16 +224,12 @@ export default function POSPage() {
                       <button
                         onClick={() => updateQuantity(item.id, item.quantity - 1)}
                         className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-sm transition"
-                      >
-                        −
-                      </button>
+                      >−</button>
                       <span className="text-sm text-white w-6 text-center">{item.quantity}</span>
                       <button
                         onClick={() => updateQuantity(item.id, item.quantity + 1)}
                         className="w-6 h-6 bg-gray-700 hover:bg-gray-600 rounded text-white text-sm transition"
-                      >
-                        +
-                      </button>
+                      >+</button>
                     </div>
                     <div className="text-yellow-400 font-bold text-sm">
                       ${(item.sell_price * item.quantity).toFixed(2)}
@@ -228,10 +240,8 @@ export default function POSPage() {
             )}
           </div>
 
-          {/* Cart Footer */}
           <div className="border-t border-gray-800 px-5 py-4">
 
-            {/* Customer Select */}
             <div className="mb-3">
               <label className="text-xs text-gray-400 uppercase tracking-wide mb-1.5 block">Customer</label>
               <select
@@ -249,7 +259,6 @@ export default function POSPage() {
               </select>
             </div>
 
-            {/* Payment Method */}
             <div className="mb-4">
               <label className="text-xs text-gray-400 uppercase tracking-wide mb-1.5 block">Payment Method</label>
               <div className="grid grid-cols-2 gap-2">
@@ -269,7 +278,6 @@ export default function POSPage() {
               </div>
             </div>
 
-            {/* Totals */}
             <div className="border-t border-gray-800 pt-3 mb-4">
               <div className="flex justify-between text-sm text-gray-400 mb-1">
                 <span>Subtotal</span>
@@ -281,7 +289,6 @@ export default function POSPage() {
               </div>
             </div>
 
-            {/* Complete Sale Button */}
             <button
               onClick={handleCompleteSale}
               disabled={completing || cart.length === 0}
@@ -304,7 +311,6 @@ export default function POSPage() {
               <p className="text-gray-400 text-sm mt-1">Receipt #{receipt.receiptNumber}</p>
             </div>
 
-            {/* Receipt Details */}
             <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 mb-4">
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-gray-400">Customer</span>
@@ -331,12 +337,20 @@ export default function POSPage() {
               Thank you for your business!
             </div>
 
-            <button
-              onClick={() => setReceipt(null)}
-              className="w-full bg-yellow-400 hover:bg-yellow-300 text-black font-bold py-2.5 rounded-lg transition text-sm"
-            >
-              Done
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={handlePrintReceipt}
+                className="flex-1 border border-yellow-600 hover:border-yellow-400 text-yellow-400 hover:text-yellow-300 font-bold py-2.5 rounded-lg transition text-sm"
+              >
+                🖨️ Print Receipt
+              </button>
+              <button
+                onClick={() => setReceipt(null)}
+                className="flex-1 bg-yellow-400 hover:bg-yellow-300 text-black font-bold py-2.5 rounded-lg transition text-sm"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}
