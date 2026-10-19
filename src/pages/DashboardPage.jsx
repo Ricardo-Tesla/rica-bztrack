@@ -50,7 +50,8 @@ export default function DashboardPage() {
     )
   }
 
-  const monthProfit = data.thisMonth.revenue - data.thisMonth.expenses
+  // Revenue − cost of the goods sold − expenses (restocks are not expenses)
+  const monthProfit = data.thisMonth.revenue - data.thisMonth.cogs - data.thisMonth.expenses
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 p-8">
@@ -84,7 +85,7 @@ export default function DashboardPage() {
           <div className={`text-2xl font-bold ${monthProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
             ${monthProfit.toFixed(2)}
           </div>
-          <div className="text-xs text-gray-500 mt-1">After expenses</div>
+          <div className="text-xs text-gray-500 mt-1">After cost of goods & expenses</div>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
           <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Net Profit</div>

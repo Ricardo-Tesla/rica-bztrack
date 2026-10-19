@@ -81,7 +81,9 @@ export default function POSPage() {
       clearCart()
       await loadData()
     } catch (err) {
-      setError('Failed to complete sale: ' + err)
+      setError('Failed to complete sale: ' + (err?.message || err))
+      // Nothing was saved. Reload so the stock numbers on screen are current.
+      await loadData()
     } finally {
       setCompleting(false)
     }

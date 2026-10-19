@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getSuppliers, addSupplier, deleteSupplier } from '../services/supplierService'
+import { getSuppliers, addSupplier, updateSupplier, deleteSupplier } from '../services/supplierService'
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState([])
@@ -52,7 +52,11 @@ export default function SuppliersPage() {
     try {
       setSaving(true)
       setError('')
-      await addSupplier(form)
+      if (editingSupplier) {
+        await updateSupplier(editingSupplier.id, form)
+      } else {
+        await addSupplier(form)
+      }
       setForm(emptyForm)
       setShowModal(false)
       await loadSuppliers()

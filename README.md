@@ -86,7 +86,7 @@ Rica BizTrack is built for small business owners who:
 ### 💸 Expenses
 - Record business expenses by category
 - Categories: Rent, Salary, Utilities, Marketing, Transport,
-  Stock Purchase, Maintenance, Other
+  Maintenance, Other (stock purchases are recorded with Restock, not as expenses)
 - Monthly expense breakdown
 - Auto-creates transaction record on every expense
 
@@ -104,9 +104,10 @@ Rica BizTrack is built for small business owners who:
 
 ### 💾 Data Backup
 - One click backup from the sidebar
-- Saves a complete copy of the SQLite database
+- Saves a complete, consistent copy of the database (safe while the app is running)
 - Choose where to save the backup file
-- Restore by replacing the database file
+- One click restore from the sidebar — the backup is checked first and a safety
+  copy of your current data is saved before anything is replaced
 
 ---
 
@@ -145,7 +146,17 @@ This keeps your profit margins and P&L reports accurate over time.
 Every financial event creates a transaction automatically:
 - Complete a sale → income transaction created
 - Add an expense → expense transaction created
-- Restock a product → stock purchase expense + transaction created
+- Restock a product → stock purchase transaction (money out) created
+
+Each of these is saved all-or-nothing: if anything fails part-way, nothing is
+saved, so stock, sales and the ledger always stay in step. A sale is refused if
+there is not enough stock.
+
+### Stock Purchases and Profit
+Stock you buy is inventory, not an expense. When you restock, the payment is
+logged in Transactions as money out, and the cost goes into the product's
+average buy price. In Profit & Loss that cost is counted as COGS when the items
+are sold — so it is never counted twice.
 
 ### P&L Calculation
 ```
@@ -198,7 +209,7 @@ npm run test:ui     # visual browser UI
 |-------|-------|----------------|
 | Unit | 48 | Margin, markup, cart total, profit, formatting, validation |
 | Integration | 28 | Suppliers, products, customers, sales, expenses |
-| Restock | 10 | Weighted average cost, stock movements, auto expense |
+| Restock | 10 | Weighted average cost, stock movements, cash-out logging |
 | **Total** | **86** | **All passing** |
 
 ---
@@ -298,13 +309,10 @@ stock_movements  →  restock history per product
 Click **💾 Backup Data** in the sidebar — choose where to save.
 
 **Restore:**
-```
-1. Close Rica BizTrack
-2. Navigate to AppData\Roaming\com.ricabiztrack.app\
-3. Replace rica_biztrack.db with your backup file
-4. Rename backup file to rica_biztrack.db
-5. Open Rica BizTrack
-```
+Click **♻️ Restore Backup** in the sidebar and choose a backup file.
+The file is checked, a safety copy of your current data is saved to
+`AppData\Roaming\com.ricabiztrack.app\backups\pre-restore-<time>.db`,
+and the app restarts with the restored data.
 
 ---
 

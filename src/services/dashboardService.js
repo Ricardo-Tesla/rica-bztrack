@@ -90,6 +90,15 @@ export async function getDashboardData() {
     AND status = 'completed'
   `, [monthStr])
 
+  // This month cost of goods sold (buy price of the items sold this month)
+  const monthlyCogs = await db.select(`
+    SELECT COALESCE(SUM(si.buy_price * si.quantity), 0) as total
+    FROM sale_items si
+    JOIN sales s ON si.sale_id = s.id
+    WHERE strftime('%Y-%m', s.created_at) = ?
+    AND s.status = 'completed'
+  `, [monthStr])
+
   // This month expenses
   const monthlyExpenses = await db.select(`
     SELECT COALESCE(SUM(amount), 0) as total
@@ -115,6 +124,7 @@ export async function getDashboardData() {
     },
     thisMonth: {
       revenue: parseFloat(monthlyRevenue[0].total) || 0,
+      cogs: parseFloat(monthlyCogs[0].total) || 0,
       expenses: parseFloat(monthlyExpenses[0].total) || 0,
     },
     counts: {

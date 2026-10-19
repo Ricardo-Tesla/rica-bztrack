@@ -80,10 +80,11 @@ export default function ExpensesPage() {
   }).reduce((a, e) => a + e.amount, 0)
 
   // Category breakdown
-  const byCategory = EXPENSE_CATEGORIES.map(cat => ({
+  // Built from the saved data so older categories (e.g. a manual "Stock Purchase") still show
+  const byCategory = [...new Set(expenses.map(e => e.category))].map(cat => ({
     category: cat,
     total: expenses.filter(e => e.category === cat).reduce((a, e) => a + e.amount, 0)
-  })).filter(c => c.total > 0)
+  })).filter(c => c.total > 0).sort((a, b) => b.total - a.total)
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 p-8">
@@ -265,6 +266,9 @@ export default function ExpensesPage() {
                 >
                   {EXPENSE_CATEGORIES.map(c => <option key={c}>{c}</option>)}
                 </select>
+                <p className="text-xs text-gray-500 mt-1.5">
+                  Buying stock? Use Products → Restock instead, so its cost is counted when the items sell.
+                </p>
               </div>
               <div>
                 <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Amount *</label>

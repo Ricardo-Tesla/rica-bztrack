@@ -191,8 +191,20 @@ describe('generateReceiptNumber', () => {
         expect(r1).not.toBe(r2)
     })
 
-    it('has correct format RCT-YYYYMMDD-XXXX', () => {
-        expect(generateReceiptNumber()).toMatch(/^RCT-\d{8}-[A-Z0-9]{4}$/)
+    it('has correct format RCT-YYYYMMDD-XXXXXX', () => {
+        expect(generateReceiptNumber()).toMatch(/^RCT-\d{8}-[A-Z0-9]{6}$/)
+    })
+
+    it('uses the local date', () => {
+        const now = new Date()
+        const local = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+        expect(generateReceiptNumber().slice(4, 12)).toBe(local)
+    })
+
+    it('does not repeat across many quick calls', () => {
+        const seen = new Set()
+        for (let i = 0; i < 1000; i++) seen.add(generateReceiptNumber())
+        expect(seen.size).toBe(1000)
     })
 })
 

@@ -151,5 +151,42 @@ pub fn get_migrations() -> Vec<Migration> {
                 ",
                 kind: MigrationKind::Up,
         },
+        Migration {
+            version: 9,
+            description: "restock_cost_as_cogs_and_reference_type",
+            // 1. Transactions get a reference_type ('sale', 'expense', 'restock')
+            //    so ids from different tables can no longer be confused.
+            // 2. Stock bought on restock is inventory, not an expense: its cost is
+            //    counted as COGS when the items are sold. Older versions also saved
+            //    every restock as an expense, which counted the cost twice in P&L.
+            //    Those auto-created "Restock — ..." expenses are removed here; the
+            //    matching cash-out entries stay in the transactions ledger.
+            sql: "
+                ALTER TABLE transactions ADD COLUMN reference_type TEXT;
+
+                UPDATE transactions SET reference_type = 'sale'
+                WHERE reference_id IS NOT NULL AND type = 'income' AND category = 'Sales';
+
+                UPDATE transactions SET reference_type = 'restock', reference_id = NULL
+                WHERE reference_id IS NOT NULL
+                  AND type = 'expense'
+                  AND category = 'Stock Purchase'
+                  AND reference_id IN (
+                      SELECT id FROM expenses
+                      WHERE category = 'Stock Purchase' AND description LIKE 'Restock — %'
+                  );
+
+                UPDATE transactions SET reference_type = 'expense'
+                WHERE reference_id IS NOT NULL AND type = 'expense' AND reference_type IS NULL;
+
+                DELETE FROM expenses
+                WHERE category = 'Stock Purchase' AND description LIKE 'Restock — %';
+
+                CREATE INDEX IF NOT EXISTS idx_sale_items_sale_id ON sale_items(sale_id);
+                CREATE INDEX IF NOT EXISTS idx_transactions_reference
+                    ON transactions(reference_type, reference_id);
+            ",
+            kind: MigrationKind::Up,
+        },
     ]
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { backupDatabase } from '../services/backupService'
+import { backupDatabase, restoreDatabase } from '../services/backupService'
 
 const navItems = [
   { id: 'dashboard', label: 'Dashboard', icon: '📊' },
@@ -26,13 +26,28 @@ export default function Sidebar({ activePage, onNavigate }) {
       if (result.success) {
         setBackupStatus({ type: 'success', message: 'Backup saved!' })
       } else if (!result.cancelled) {
-        setBackupStatus({ type: 'error', message: 'Backup failed' })
+        setBackupStatus({ type: 'error', message: result.error || 'Backup failed' })
       }
     } catch (err) {
       setBackupStatus({ type: 'error', message: 'Backup failed' })
     } finally {
       setBacking(false)
-      setTimeout(() => setBackupStatus(null), 3000)
+      setTimeout(() => setBackupStatus(null), 5000)
+    }
+  }
+
+  async function handleRestore() {
+    try {
+      setBacking(true)
+      setBackupStatus(null)
+      const result = await restoreDatabase()
+      // On success the app restarts, so we only get here if it was cancelled or failed
+      if (!result.success && !result.cancelled) {
+        setBackupStatus({ type: 'error', message: result.error || 'Restore failed' })
+      }
+    } finally {
+      setBacking(false)
+      setTimeout(() => setBackupStatus(null), 8000)
     }
   }
 
@@ -110,6 +125,15 @@ export default function Sidebar({ activePage, onNavigate }) {
               <span>💾</span> Backup Data
             </>
           )}
+        </button>
+
+        {/* Restore Button */}
+        <button
+          onClick={handleRestore}
+          disabled={backing}
+          className="w-full flex items-center justify-center gap-2 bg-transparent hover:bg-gray-800 disabled:opacity-50 border border-gray-800 hover:border-gray-600 text-gray-500 hover:text-white px-3 py-2 rounded-lg text-xs font-medium transition mb-3"
+        >
+          <span>♻️</span> Restore Backup
         </button>
 
         <div className="text-xs text-gray-600">Rica BizTrack v1.0</div>

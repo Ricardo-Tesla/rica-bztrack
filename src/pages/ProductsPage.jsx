@@ -144,7 +144,7 @@ export default function ProductsPage() {
       setShowRestockModal(false)
       await loadData()
     } catch (err) {
-      setRestockError('Failed to restock product')
+      setRestockError('Failed to restock product: ' + (err?.message || err))
     } finally {
       setRestockSaving(false)
     }
@@ -580,6 +580,9 @@ export default function ProductsPage() {
                     })()}
                   </span>
                 </div>
+                <p className="text-xs text-gray-500 pt-1">
+                  Logged as money out in Transactions. In Profit &amp; Loss the cost is counted when these items are sold.
+                </p>
               </div>
             )}
 

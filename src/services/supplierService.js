@@ -23,6 +23,25 @@ export async function addSupplier(supplier) {
   )
 }
 
+// Update a supplier
+export async function updateSupplier(id, supplier) {
+  const db = await getDb()
+  await db.execute(
+    `UPDATE suppliers SET
+     name = ?, contact = ?, phone = ?, email = ?, address = ?, notes = ?
+     WHERE id = ?`,
+    [
+      supplier.name,
+      supplier.contact || null,
+      supplier.phone || null,
+      supplier.email || null,
+      supplier.address || null,
+      supplier.notes || null,
+      id,
+    ]
+  )
+}
+
 // Delete a supplier
 export async function deleteSupplier(id) {
   const db = await getDb()

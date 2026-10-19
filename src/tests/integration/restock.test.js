@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { getTestDb, resetTestDb } from './testDb'
+import { getTestDb, resetTestDb } from './testDB'
 import { addProductToDb, getProductsFromDb } from './serviceHelpers'
 import { addSupplierToDb, getExpensesFromDb, getTransactionsFromDb } from './serviceHelpers'
 import { restockProductInDb, getStockMovementsFromDb } from './serviceHelpers'

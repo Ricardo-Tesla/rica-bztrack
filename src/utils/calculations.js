@@ -48,11 +48,16 @@ export function formatDate(dateStr) {
   })
 }
 
-// Generate receipt number
+// Generate receipt number: RCT-YYYYMMDD-XXXXXX
+// Uses the local date and 6 random characters (2+ billion combinations per day).
+// The sales service also retries automatically in the very rare case of a clash.
 export function generateReceiptNumber() {
   const now = new Date()
-  const date = now.toISOString().slice(0, 10).replace(/-/g, '')
-  const random = Math.random().toString(36).substring(2, 6).toUpperCase()
+  const date = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  const bytes = new Uint8Array(6)
+  globalThis.crypto.getRandomValues(bytes)
+  const random = Array.from(bytes, b => chars[b % chars.length]).join('')
   return `RCT-${date}-${random}`
 }
 
@@ -77,8 +82,8 @@ export function validateProduct(form) {
 export function validateSale(cart) {
   const errors = []
   if (!cart || cart.length === 0) errors.push('Cart is empty')
-  cart.forEach(item => {
-    if (item.quantity <= 0) errors.push(`${item.name} has invalid quantity`)
+  ;(cart || []).forEach(item => {
+    if (!Number.isInteger(item.quantity) || item.quantity <= 0) errors.push(`${item.name} has invalid quantity`)
     if (item.quantity > item.stock) errors.push(`${item.name} exceeds available stock`)
   })
   return errors
