@@ -188,5 +188,19 @@ pub fn get_migrations() -> Vec<Migration> {
             ",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 10,
+            description: "archive_instead_of_delete",
+            // Products, customers and suppliers that have history (sales, stock
+            // movements, linked products) are archived (hidden) instead of
+            // deleted, so old sales and reports stay complete.
+            sql: "
+                ALTER TABLE products  ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE customers ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE suppliers ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;
+                CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id);
+            ",
+            kind: MigrationKind::Up,
+        },
     ]
 }

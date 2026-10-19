@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { getExpenses, addExpense, deleteExpense, EXPENSE_CATEGORIES } from '../services/expenseService'
+import { formatMoney, parseDbDate, todayLocal } from '../utils/format'
 
 const PAYMENT_METHODS = ['Cash', 'Card', 'Mobile Money', 'Bank Transfer']
 
-const emptyForm = {
+const emptyForm = () => ({
   description: '', category: 'Rent',
-  amount: '', date: new Date().toISOString().split('T')[0],
+  amount: '', date: todayLocal(),
   payment_method: 'Cash'
-}
+})
 
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState([])
@@ -40,7 +41,7 @@ export default function ExpensesPage() {
       setSaving(true)
       setError('')
       await addExpense(form)
-      setForm(emptyForm)
+      setForm(emptyForm())
       setShowModal(false)
       await loadExpenses()
     } catch (err) {
@@ -62,7 +63,7 @@ export default function ExpensesPage() {
 
   function formatDate(dateStr) {
     if (!dateStr) return '—'
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    return parseDbDate(dateStr).toLocaleDateString('en-US', {
       year: 'numeric', month: 'short', day: 'numeric'
     })
   }
@@ -74,7 +75,7 @@ export default function ExpensesPage() {
 
   const totalExpenses = expenses.reduce((a, e) => a + e.amount, 0)
   const thisMonth = expenses.filter(e => {
-    const d = new Date(e.date)
+    const d = parseDbDate(e.date)
     const now = new Date()
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
   }).reduce((a, e) => a + e.amount, 0)
@@ -99,11 +100,11 @@ export default function ExpensesPage() {
       <div className="grid grid-cols-3 gap-4 mb-8">
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
           <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Expenses</div>
-          <div className="text-2xl font-bold text-red-400">${totalExpenses.toFixed(2)}</div>
+          <div className="text-2xl font-bold text-red-400">{formatMoney(totalExpenses)}</div>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
           <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">This Month</div>
-          <div className="text-2xl font-bold text-red-400">${thisMonth.toFixed(2)}</div>
+          <div className="text-2xl font-bold text-red-400">{formatMoney(thisMonth)}</div>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
           <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Records</div>
@@ -119,7 +120,7 @@ export default function ExpensesPage() {
             {byCategory.map(c => (
               <div key={c.category} className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-3">
                 <div className="text-xs text-gray-400 mb-1">{c.category}</div>
-                <div className="text-red-400 font-bold">${c.total.toFixed(2)}</div>
+                <div className="text-red-400 font-bold">{formatMoney(c.total)}</div>
               </div>
             ))}
           </div>
@@ -136,7 +137,7 @@ export default function ExpensesPage() {
           className="bg-gray-900 border border-gray-700 focus:border-yellow-400 rounded-lg px-4 py-2.5 text-sm outline-none text-white w-80 transition"
         />
         <button
-          onClick={() => { setShowModal(true); setError('') }}
+          onClick={() => { setForm(emptyForm()); setShowModal(true); setError('') }}
           className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-black font-bold px-5 py-2.5 rounded-lg transition text-sm"
         >
           <span className="text-lg leading-none">+</span> Add Expense
@@ -194,7 +195,7 @@ export default function ExpensesPage() {
                     </span>
                   </td>
                   <td className="px-5 py-4 text-red-400 font-bold">
-                    -${parseFloat(e.amount).toFixed(2)}
+                    -{formatMoney(parseFloat(e.amount))}
                   </td>
                   <td className="px-5 py-4 text-gray-400 text-xs">{formatDate(e.date)}</td>
                   <td className="px-5 py-4">
@@ -219,7 +220,7 @@ export default function ExpensesPage() {
             </span>
             <span className="text-xs text-gray-500">
               Total: <span className="text-red-400 font-semibold">
-                -${filtered.reduce((a, e) => a + e.amount, 0).toFixed(2)}
+                -{formatMoney(filtered.reduce((a, e) => a + e.amount, 0))}
               </span>
             </span>
           </div>

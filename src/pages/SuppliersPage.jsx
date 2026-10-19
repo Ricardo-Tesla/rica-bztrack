@@ -8,6 +8,7 @@ export default function SuppliersPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [editingSupplier, setEditingSupplier] = useState(null)
+  const [notice, setNotice] = useState('')
 
   const emptyForm = { name: '', contact: '', phone: '', email: '', address: '', notes: '' }
   const [form, setForm] = useState(emptyForm)
@@ -68,10 +69,11 @@ export default function SuppliersPage() {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Are you sure you want to delete this supplier?')) return
+    if (!confirm('Delete this supplier?\n\nIf it has history, it will be archived (hidden) instead, so your past sales and reports stay correct.')) return
     try {
-      await deleteSupplier(id)
+      const result = await deleteSupplier(id)
       await loadSuppliers()
+      if (result === 'archived') setNotice('This supplier has history, so it was archived (hidden) instead of deleted.')
     } catch (err) {
       setError('Failed to delete supplier')
     }
@@ -95,6 +97,12 @@ export default function SuppliersPage() {
       </div>
 
       {/* Error */}
+      {notice && (
+        <div className="bg-blue-950 border border-blue-800 text-blue-300 px-4 py-3 rounded-lg mb-4 text-sm flex justify-between items-center">
+          <span>{notice}</span>
+          <button onClick={() => setNotice('')} className="text-blue-400 hover:text-white ml-4">✕</button>
+        </div>
+      )}
       {error && (
         <div className="bg-red-950 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-5 text-sm">
           {error}

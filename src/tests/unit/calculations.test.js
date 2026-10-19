@@ -138,23 +138,23 @@ describe('calculateGrossProfit', () => {
 // ============================================================
 describe('formatCurrency', () => {
     it('formats whole number correctly', () => {
-        expect(formatCurrency(1000)).toBe('$1000.00')
+        expect(formatCurrency(1000)).toBe('RWF 1,000')
     })
 
     it('formats decimal correctly', () => {
-        expect(formatCurrency(99.5)).toBe('$99.50')
+        expect(formatCurrency(99.5)).toBe('RWF 100') // RWF has no decimals
     })
 
     it('handles 0', () => {
-        expect(formatCurrency(0)).toBe('$0.00')
+        expect(formatCurrency(0)).toBe('RWF 0')
     })
 
     it('handles null', () => {
-        expect(formatCurrency(null)).toBe('$0.00')
+        expect(formatCurrency(null)).toBe('RWF 0')
     })
 
     it('handles undefined', () => {
-        expect(formatCurrency(undefined)).toBe('$0.00')
+        expect(formatCurrency(undefined)).toBe('RWF 0')
     })
 })
 
@@ -174,6 +174,10 @@ describe('formatDate', () => {
         const result = formatDate('2025-01-15')
         expect(result).toContain('Jan')
         expect(result).toContain('2025')
+    })
+
+    it('keeps a plain date on the same calendar day', () => {
+        expect(formatDate('2025-01-15')).toBe('Jan 15, 2025')
     })
 })
 

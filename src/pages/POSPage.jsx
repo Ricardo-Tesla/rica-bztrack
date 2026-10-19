@@ -3,6 +3,7 @@ import { getProducts } from '../services/productService'
 import { getCustomers } from '../services/customerService'
 import { completeSale } from '../services/salesService'
 import { downloadReceipt } from '../utils/receiptPrinter'
+import { formatMoney } from '../utils/format'
 
 const PAYMENT_METHODS = ['Cash', 'Card', 'Mobile Money', 'Bank Transfer']
 
@@ -157,7 +158,7 @@ export default function POSPage() {
                       }`}
                   >
                     <div className="font-semibold text-white text-sm mb-1">{p.name}</div>
-                    <div className="text-yellow-400 font-bold">${parseFloat(p.sell_price).toFixed(2)}</div>
+                    <div className="text-yellow-400 font-bold">{formatMoney(parseFloat(p.sell_price))}</div>
                     <div className="flex items-center justify-between mt-2">
                       <span className="text-xs text-gray-500">{p.sku}</span>
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium
@@ -234,7 +235,7 @@ export default function POSPage() {
                       >+</button>
                     </div>
                     <div className="text-yellow-400 font-bold text-sm">
-                      ${(item.sell_price * item.quantity).toFixed(2)}
+                      {formatMoney((item.sell_price * item.quantity))}
                     </div>
                   </div>
                 </div>
@@ -283,11 +284,11 @@ export default function POSPage() {
             <div className="border-t border-gray-800 pt-3 mb-4">
               <div className="flex justify-between text-sm text-gray-400 mb-1">
                 <span>Subtotal</span>
-                <span>${subtotal.toFixed(2)}</span>
+                <span>{formatMoney(subtotal)}</span>
               </div>
               <div className="flex justify-between font-bold text-white text-lg mt-2">
                 <span>Total</span>
-                <span className="text-yellow-400">${total.toFixed(2)}</span>
+                <span className="text-yellow-400">{formatMoney(total)}</span>
               </div>
             </div>
 
@@ -326,12 +327,12 @@ export default function POSPage() {
               {receipt.items.map(item => (
                 <div key={item.id} className="flex justify-between text-sm mb-1.5">
                   <span className="text-gray-300">{item.name} × {item.quantity}</span>
-                  <span className="text-white">${(item.sell_price * item.quantity).toFixed(2)}</span>
+                  <span className="text-white">{formatMoney((item.sell_price * item.quantity))}</span>
                 </div>
               ))}
               <div className="border-t border-gray-700 mt-3 pt-3 flex justify-between font-bold">
                 <span className="text-white">Total</span>
-                <span className="text-yellow-400 text-lg">${receipt.total.toFixed(2)}</span>
+                <span className="text-yellow-400 text-lg">{formatMoney(receipt.total)}</span>
               </div>
             </div>
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getSales } from '../services/salesService'
 import { downloadReceipt } from '../utils/receiptPrinter'
+import { formatMoney, parseDbDate } from '../utils/format'
 
 export default function SalesPage() {
   const [sales, setSales] = useState([])
@@ -25,7 +26,7 @@ export default function SalesPage() {
 
   function formatDate(dateStr) {
     if (!dateStr) return '—'
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    return parseDbDate(dateStr).toLocaleDateString('en-US', {
       year: 'numeric', month: 'short', day: 'numeric',
       hour: '2-digit', minute: '2-digit'
     })
@@ -58,11 +59,11 @@ export default function SalesPage() {
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
           <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Revenue</div>
-          <div className="text-2xl font-bold text-yellow-400">${totalRevenue.toFixed(2)}</div>
+          <div className="text-2xl font-bold text-yellow-400">{formatMoney(totalRevenue)}</div>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
           <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Average Sale</div>
-          <div className="text-2xl font-bold text-yellow-400">${avgSale.toFixed(2)}</div>
+          <div className="text-2xl font-bold text-yellow-400">{formatMoney(avgSale)}</div>
         </div>
       </div>
 
@@ -143,7 +144,7 @@ export default function SalesPage() {
                     </span>
                   </td>
                   <td className="px-5 py-4 text-yellow-400 font-bold">
-                    ${parseFloat(s.total).toFixed(2)}
+                    {formatMoney(parseFloat(s.total))}
                   </td>
                   <td className="px-5 py-4 text-gray-400 text-xs">
                     {formatDate(s.created_at)}
@@ -206,14 +207,14 @@ export default function SalesPage() {
                     {item.product_name} × {item.quantity}
                   </span>
                   <span className="text-white font-medium">
-                    ${parseFloat(item.subtotal).toFixed(2)}
+                    {formatMoney(parseFloat(item.subtotal))}
                   </span>
                 </div>
               ))}
               <div className="border-t border-gray-700 mt-3 pt-3 flex justify-between font-bold">
                 <span className="text-white">Total</span>
                 <span className="text-yellow-400 text-lg">
-                  ${parseFloat(selectedSale.total).toFixed(2)}
+                  {formatMoney(parseFloat(selectedSale.total))}
                 </span>
               </div>
             </div>

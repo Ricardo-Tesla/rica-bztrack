@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
 import { getTransactions, addTransaction, getTransactionSummary } from '../services/transactionService'
+import { formatMoney, parseDbDate, todayLocal } from '../utils/format'
 
 const PAYMENT_METHODS = ['Cash', 'Card', 'Mobile Money', 'Bank Transfer']
 const CATEGORIES = ['Sales', 'Rent', 'Salary', 'Utilities', 'Marketing', 'Transport', 'Stock Purchase', 'Maintenance', 'Other']
 
-const emptyForm = {
+const emptyForm = () => ({
   description: '', type: 'income', category: 'Sales',
   amount: '', payment_method: 'Cash',
-  date: new Date().toISOString().split('T')[0]
-}
+  date: todayLocal()
+})
 
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState([])
@@ -47,7 +48,7 @@ export default function TransactionsPage() {
       setSaving(true)
       setError('')
       await addTransaction(form)
-      setForm(emptyForm)
+      setForm(emptyForm())
       setShowModal(false)
       await loadData()
     } catch (err) {
@@ -59,7 +60,7 @@ export default function TransactionsPage() {
 
   function formatDate(dateStr) {
     if (!dateStr) return '—'
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    return parseDbDate(dateStr).toLocaleDateString('en-US', {
       year: 'numeric', month: 'short', day: 'numeric'
     })
   }
@@ -77,27 +78,27 @@ export default function TransactionsPage() {
       {/* Header */}
       <div className="flex flex-col items-center mb-8">
         <h1 className="text-3xl font-bold text-yellow-400">Transactions</h1>
-        <p className="text-gray-400 mt-1 text-sm">Complete financial ledger — all money in and out</p>
+        <p className="text-gray-400 mt-1 text-sm">Cash ledger — all money in and out, including stock purchases. For profit, see Profit & Loss.</p>
       </div>
 
       {/* Stats Row */}
       <div className="grid grid-cols-3 gap-4 mb-8">
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
-          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Income</div>
+          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Money In</div>
           <div className="text-2xl font-bold text-green-400">
-            +${parseFloat(summary.total_income || 0).toFixed(2)}
+            +{formatMoney(parseFloat(summary.total_income || 0))}
           </div>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
-          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Expenses</div>
+          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Money Out</div>
           <div className="text-2xl font-bold text-red-400">
-            -${parseFloat(summary.total_expenses || 0).toFixed(2)}
+            -{formatMoney(parseFloat(summary.total_expenses || 0))}
           </div>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
-          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Net Balance</div>
+          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Net Cash</div>
           <div className={`text-2xl font-bold ${parseFloat(summary.net || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            ${parseFloat(summary.net || 0).toFixed(2)}
+            {formatMoney(parseFloat(summary.net || 0))}
           </div>
         </div>
       </div>
@@ -130,7 +131,7 @@ export default function TransactionsPage() {
           </div>
         </div>
         <button
-          onClick={() => { setShowModal(true); setError('') }}
+          onClick={() => { setForm(emptyForm()); setShowModal(true); setError('') }}
           className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-black font-bold px-5 py-2.5 rounded-lg transition text-sm"
         >
           <span className="text-lg leading-none">+</span> Add Transaction
@@ -199,7 +200,7 @@ export default function TransactionsPage() {
                   </td>
                   <td className="px-5 py-4 text-gray-400 text-xs">{t.payment_method}</td>
                   <td className={`px-5 py-4 font-bold ${t.type === 'income' ? 'text-green-400' : 'text-red-400'}`}>
-                    {t.type === 'income' ? '+' : '-'}${parseFloat(t.amount).toFixed(2)}
+                    {t.type === 'income' ? '+' : '-'}{formatMoney(parseFloat(t.amount))}
                   </td>
                   <td className="px-5 py-4 text-gray-400 text-xs">{formatDate(t.date)}</td>
                 </tr>
@@ -279,6 +280,11 @@ export default function TransactionsPage() {
                 >
                   {CATEGORIES.map(c => <option key={c}>{c}</option>)}
                 </select>
+                <p className="text-xs text-gray-500 mt-1.5">
+                  {form.category === 'Stock Purchase'
+                    ? 'Recorded as money out only. Tip: use Products → Restock so the stock goes up too.'
+                    : 'Counts in Profit & Loss as Other Income / Other Expenses.'}
+                </p>
               </div>
 
               <div>

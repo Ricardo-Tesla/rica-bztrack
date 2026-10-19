@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getCustomers, addCustomer, updateCustomer, deleteCustomer } from '../services/customerService'
+import { formatMoney, parseDbDate } from '../utils/format'
 
 const emptyForm = { name: '', phone: '', email: '', address: '' }
 
@@ -12,6 +13,7 @@ export default function CustomersPage() {
   const [editingCustomer, setEditingCustomer] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [search, setSearch] = useState('')
+  const [notice, setNotice] = useState('')
 
   useEffect(() => { loadCustomers() }, [])
 
@@ -66,10 +68,11 @@ export default function CustomersPage() {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Are you sure you want to delete this customer?')) return
+    if (!confirm('Delete this customer?\n\nIf it has history, it will be archived (hidden) instead, so your past sales and reports stay correct.')) return
     try {
-      await deleteCustomer(id)
+      const result = await deleteCustomer(id)
       await loadCustomers()
+      if (result === 'archived') setNotice('This customer has history, so it was archived (hidden) instead of deleted.')
     } catch (err) {
       setError('Failed to delete customer')
     }
@@ -77,7 +80,7 @@ export default function CustomersPage() {
 
   function formatDate(dateStr) {
     if (!dateStr) return 'Never'
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    return parseDbDate(dateStr).toLocaleDateString('en-US', {
       year: 'numeric', month: 'short', day: 'numeric'
     })
   }
@@ -113,7 +116,7 @@ export default function CustomersPage() {
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
           <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Revenue</div>
-          <div className="text-2xl font-bold text-yellow-400">${totalRevenue.toFixed(2)}</div>
+          <div className="text-2xl font-bold text-yellow-400">{formatMoney(totalRevenue)}</div>
         </div>
       </div>
 
@@ -135,6 +138,12 @@ export default function CustomersPage() {
       </div>
 
       {/* Error */}
+      {notice && (
+        <div className="bg-blue-950 border border-blue-800 text-blue-300 px-4 py-3 rounded-lg mb-4 text-sm flex justify-between items-center">
+          <span>{notice}</span>
+          <button onClick={() => setNotice('')} className="text-blue-400 hover:text-white ml-4">✕</button>
+        </div>
+      )}
       {error && (
         <div className="bg-red-950 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-5 text-sm">
           {error}
@@ -196,7 +205,7 @@ export default function CustomersPage() {
                     </span>
                   </td>
                   <td className="px-5 py-4 text-yellow-400 font-semibold">
-                    ${parseFloat(c.total_spent || 0).toFixed(2)}
+                    {formatMoney(parseFloat(c.total_spent || 0))}
                   </td>
                   <td className="px-5 py-4 text-gray-400 text-xs">
                     {formatDate(c.last_visit)}

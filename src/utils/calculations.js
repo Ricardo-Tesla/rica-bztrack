@@ -1,3 +1,5 @@
+import { formatMoney, formatDate } from './format'
+
 // Calculate profit margin
 export function calculateMargin(buyPrice, sellPrice) {
   if (!buyPrice || !sellPrice || sellPrice === 0) return 0
@@ -34,19 +36,13 @@ export function calculateGrossProfit(revenue, cogs) {
   return parseFloat((revenue - cogs).toFixed(2))
 }
 
-// Format currency
+// Format currency — see utils/format.js (RWF, no decimals by default)
 export function formatCurrency(amount) {
-  if (amount === null || amount === undefined) return '$0.00'
-  return '$' + parseFloat(amount).toFixed(2)
+  return formatMoney(amount)
 }
 
-// Format date
-export function formatDate(dateStr) {
-  if (!dateStr) return '—'
-  return new Date(dateStr).toLocaleDateString('en-US', {
-    year: 'numeric', month: 'short', day: 'numeric'
-  })
-}
+// Format date — see utils/format.js
+export { formatDate }
 
 // Generate receipt number: RCT-YYYYMMDD-XXXXXX
 // Uses the local date and 6 random characters (2+ billion combinations per day).

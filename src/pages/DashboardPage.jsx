@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getDashboardData } from '../services/dashboardService'
+import { formatMoney, parseDbDate } from '../utils/format'
 
 export default function DashboardPage() {
   const [data, setData] = useState(null)
@@ -22,7 +23,7 @@ export default function DashboardPage() {
 
   function formatDate(dateStr) {
     if (!dateStr) return '—'
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    return parseDbDate(dateStr).toLocaleDateString('en-US', {
       month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
     })
   }
@@ -74,7 +75,7 @@ export default function DashboardPage() {
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
           <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Today's Revenue</div>
           <div className="text-2xl font-bold text-yellow-400">
-            ${data.today.revenue.toFixed(2)}
+            {formatMoney(data.today.revenue)}
           </div>
           <div className="text-xs text-gray-500 mt-1">
             {data.today.salesCount} sale{data.today.salesCount !== 1 ? 's' : ''} today
@@ -83,21 +84,21 @@ export default function DashboardPage() {
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
           <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Month Profit</div>
           <div className={`text-2xl font-bold ${monthProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            ${monthProfit.toFixed(2)}
+            {formatMoney(monthProfit)}
           </div>
           <div className="text-xs text-gray-500 mt-1">After cost of goods & expenses</div>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
           <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Net Profit</div>
           <div className={`text-2xl font-bold ${data.allTime.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            ${data.allTime.netProfit.toFixed(2)}
+            {formatMoney(data.allTime.netProfit)}
           </div>
           <div className="text-xs text-gray-500 mt-1">All time</div>
         </div>
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
           <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Revenue</div>
           <div className="text-2xl font-bold text-yellow-400">
-            ${data.allTime.revenue.toFixed(2)}
+            {formatMoney(data.allTime.revenue)}
           </div>
           <div className="text-xs text-gray-500 mt-1">All time sales</div>
         </div>
@@ -118,7 +119,7 @@ export default function DashboardPage() {
         <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
           <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Expenses</div>
           <div className="text-2xl font-bold text-red-400">
-            ${data.allTime.expenses.toFixed(2)}
+            {formatMoney(data.allTime.expenses)}
           </div>
           <div className="text-xs text-gray-500 mt-1">All time</div>
         </div>
@@ -166,7 +167,7 @@ export default function DashboardPage() {
                     </td>
                     <td className="px-5 py-3 text-gray-300 text-xs">{s.customer_name}</td>
                     <td className="px-5 py-3 text-green-400 font-semibold text-xs">
-                      ${parseFloat(s.total).toFixed(2)}
+                      {formatMoney(parseFloat(s.total))}
                     </td>
                     <td className="px-5 py-3 text-gray-500 text-xs">{formatDate(s.created_at)}</td>
                   </tr>
@@ -207,7 +208,7 @@ export default function DashboardPage() {
                       </span>
                     </td>
                     <td className={`px-5 py-3 font-bold text-xs ${t.type === 'income' ? 'text-green-400' : 'text-red-400'}`}>
-                      {t.type === 'income' ? '+' : '-'}${parseFloat(t.amount).toFixed(2)}
+                      {t.type === 'income' ? '+' : '-'}{formatMoney(parseFloat(t.amount))}
                     </td>
                   </tr>
                 ))

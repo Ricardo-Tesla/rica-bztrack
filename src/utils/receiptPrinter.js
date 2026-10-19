@@ -2,6 +2,7 @@
 
 import { writeTextFile } from '@tauri-apps/plugin-fs'
 import { save } from '@tauri-apps/plugin-dialog'
+import { formatMoney, parseDbDate } from './format'
 
 
 export function generateReceipt(sale) {
@@ -21,7 +22,7 @@ export function generateReceipt(sale) {
 
   function formatDate(dateStr) {
     if (!dateStr) return ''
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    return parseDbDate(dateStr).toLocaleDateString('en-US', {
       year: 'numeric', month: 'short', day: 'numeric',
       hour: '2-digit', minute: '2-digit'
     })
@@ -57,8 +58,8 @@ export function generateReceipt(sale) {
     lines.push(truncated)
 
     // Qty × unit price → subtotal
-    const detail = `  ${qty} x $${unitPrice.toFixed(2)}`
-    const sub = `$${subtotal.toFixed(2)}`
+    const detail = `  ${qty} x ${formatMoney(unitPrice)}`
+    const sub = `${formatMoney(subtotal)}`
     lines.push(row(detail, sub))
 
     lines.push('')
@@ -67,18 +68,18 @@ export function generateReceipt(sale) {
   lines.push(dline)
 
   // Totals
-  lines.push(row('Subtotal:', `$${parseFloat(sale.subtotal || sale.total).toFixed(2)}`))
+  lines.push(row('Subtotal:', `${formatMoney(parseFloat(sale.subtotal || sale.total))}`))
 
   if (sale.tax && parseFloat(sale.tax) > 0) {
-    lines.push(row('Tax:', `$${parseFloat(sale.tax).toFixed(2)}`))
+    lines.push(row('Tax:', `${formatMoney(parseFloat(sale.tax))}`))
   }
 
   if (sale.discount && parseFloat(sale.discount) > 0) {
-    lines.push(row('Discount:', `-$${parseFloat(sale.discount).toFixed(2)}`))
+    lines.push(row('Discount:', `-${formatMoney(parseFloat(sale.discount))}`))
   }
 
   lines.push(dline)
-  lines.push(row('TOTAL:', `$${parseFloat(sale.total).toFixed(2)}`))
+  lines.push(row('TOTAL:', `${formatMoney(parseFloat(sale.total))}`))
   lines.push(line)
 
   // Items count

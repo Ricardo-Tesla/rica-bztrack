@@ -1,4 +1,5 @@
 import { getDb, runTransaction, ref } from './db'
+import { formatMoney } from '../utils/format'
 
 // Get all stock movements
 export async function getStockMovements(productId = null) {
@@ -67,7 +68,7 @@ export function buildRestockStatements(restock) {
             (description, type, category, amount, payment_method, reference_id, reference_type, date)
             VALUES (?, 'expense', 'Stock Purchase', ?, ?, ?, 'restock', ?)`,
       params: [
-        `Restock — ${restock.product_name} (${quantity} units @ $${unitCost})`,
+        `Restock — ${restock.product_name} (${quantity} units @ ${formatMoney(unitCost)})`,
         totalCost,
         restock.payment_method || 'Cash',
         ref(1),

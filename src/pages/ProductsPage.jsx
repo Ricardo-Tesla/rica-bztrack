@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getProducts, addProduct, updateProduct, deleteProduct } from '../services/productService'
 import { getSuppliers } from '../services/supplierService'
 import { restockProduct, getStockMovements } from '../services/restockService'
+import { formatMoney, todayLocal } from '../utils/format'
 
 const CATEGORIES = ['Electronics', 'Clothing', 'Food', 'Hardware', 'Furniture', 'Other']
 const UNITS = ['Piece', 'Kg', 'Litre', 'Box', 'Pack', 'Dozen']
@@ -13,11 +14,11 @@ const emptyForm = {
   supplier_id: ''
 }
 
-const emptyRestock = {
+const emptyRestock = () => ({
   quantity: '', unit_cost: '', supplier_id: '',
   supplier_name: '', payment_method: 'Cash',
-  note: '', date: new Date().toISOString().split('T')[0]
-}
+  note: '', date: todayLocal()
+})
 
 export default function ProductsPage() {
   const [products, setProducts] = useState([])
@@ -29,6 +30,7 @@ export default function ProductsPage() {
   const [editingProduct, setEditingProduct] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [search, setSearch] = useState('')
+  const [notice, setNotice] = useState('')
 
   // Restock state
   const [showRestockModal, setShowRestockModal] = useState(false)
@@ -70,8 +72,8 @@ export default function ProductsPage() {
       unit: product.unit || 'Piece',
       buy_price: product.buy_price || '',
       sell_price: product.sell_price || '',
-      stock: product.stock || '',
-      low_stock_alert: product.low_stock_alert || '5',
+      stock: product.stock ?? '',
+      low_stock_alert: product.low_stock_alert ?? '5',
       supplier_id: product.supplier_id || ''
     })
     setError('')
@@ -81,7 +83,7 @@ export default function ProductsPage() {
   function openRestockModal(product) {
     setRestockingProduct(product)
     setRestockForm({
-      ...emptyRestock,
+      ...emptyRestock(),
       unit_cost: product.buy_price || '',
       supplier_id: product.supplier_id || '',
       supplier_name: suppliers.find(s => s.id == product.supplier_id)?.name || ''
@@ -101,28 +103,33 @@ export default function ProductsPage() {
     if (!form.name.trim()) { setError('Product name is required'); return }
     if (!form.sku.trim()) { setError('SKU is required'); return }
     if (!form.sell_price) { setError('Sell price is required'); return }
+    if (form.stock !== '' && (parseInt(form.stock) < 0 || Number.isNaN(parseInt(form.stock)))) {
+      setError('Stock cannot be negative'); return
+    }
     try {
       setSaving(true)
       setError('')
       if (editingProduct) {
-        await updateProduct(editingProduct.id, form)
+        await updateProduct(editingProduct.id, form, editingProduct.stock)
       } else {
         await addProduct(form)
       }
       setShowModal(false)
       await loadData()
     } catch (err) {
-      setError(err.includes?.('UNIQUE') ? 'SKU already exists' : 'Failed to save product')
+      const msg = String(err?.message || err)
+      setError(msg.includes('UNIQUE') ? 'SKU already exists' : 'Failed to save product: ' + msg)
     } finally {
       setSaving(false)
     }
   }
 
   async function handleDelete(id) {
-    if (!confirm('Are you sure you want to delete this product?')) return
+    if (!confirm('Delete this product?\n\nIf it has history, it will be archived (hidden) instead, so your past sales and reports stay correct.')) return
     try {
-      await deleteProduct(id)
+      const result = await deleteProduct(id)
       await loadData()
+      if (result === 'archived') setNotice('This product has history, so it was archived (hidden) instead of deleted.')
     } catch (err) {
       setError('Failed to delete product')
     }
@@ -194,6 +201,12 @@ export default function ProductsPage() {
       </div>
 
       {/* Error */}
+      {notice && (
+        <div className="bg-blue-950 border border-blue-800 text-blue-300 px-4 py-3 rounded-lg mb-4 text-sm flex justify-between items-center">
+          <span>{notice}</span>
+          <button onClick={() => setNotice('')} className="text-blue-400 hover:text-white ml-4">✕</button>
+        </div>
+      )}
       {error && (
         <div className="bg-red-950 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-5 text-sm">
           {error}
@@ -256,8 +269,8 @@ export default function ProductsPage() {
                       </span>
                     </td>
                     <td className="px-5 py-4 text-gray-300">{p.category || '—'}</td>
-                    <td className="px-5 py-4 text-gray-300">${parseFloat(p.buy_price).toFixed(2)}</td>
-                    <td className="px-5 py-4 text-yellow-400 font-semibold">${parseFloat(p.sell_price).toFixed(2)}</td>
+                    <td className="px-5 py-4 text-gray-300">{formatMoney(parseFloat(p.buy_price))}</td>
+                    <td className="px-5 py-4 text-yellow-400 font-semibold">{formatMoney(parseFloat(p.sell_price))}</td>
                     <td className="px-5 py-4">
                       {margin !== null ? (
                         <span className="text-green-400 text-xs font-semibold">{margin}%</span>
@@ -314,7 +327,7 @@ export default function ProductsPage() {
             </span>
             <span className="text-xs text-gray-500">
               Total inventory value: <span className="text-yellow-400 font-semibold">
-                ${products.reduce((a, p) => a + (p.buy_price * p.stock), 0).toFixed(2)}
+                {formatMoney(products.reduce((a, p) => a + (p.buy_price * p.stock), 0))}
               </span>
             </span>
           </div>
@@ -401,7 +414,7 @@ export default function ProductsPage() {
                 />
               </div>
               <div>
-                <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Initial Stock</label>
+                <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">{editingProduct ? 'Stock (correction)' : 'Initial Stock'}</label>
                 <input
                   type="number" min="0"
                   className="w-full bg-gray-800 border border-gray-700 focus:border-yellow-400 rounded-lg px-3 py-2.5 text-sm outline-none text-white transition"
@@ -409,6 +422,11 @@ export default function ProductsPage() {
                   value={form.stock}
                   onChange={e => setForm({ ...form, stock: e.target.value })}
                 />
+                {editingProduct && (
+                  <p className="text-xs text-gray-500 mt-1.5">
+                    Only change this to fix a count. Use Restock for new stock. Changes are saved in the stock history.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Low Stock Alert</label>
@@ -441,7 +459,7 @@ export default function ProductsPage() {
                 <span className="text-xs text-gray-400">Profit margin preview</span>
                 <span className="text-green-400 font-bold text-sm">
                   {getMargin(parseFloat(form.buy_price), parseFloat(form.sell_price))}%
-                  &nbsp;·&nbsp; ${(parseFloat(form.sell_price) - parseFloat(form.buy_price)).toFixed(2)} per unit
+                  &nbsp;·&nbsp; {formatMoney((parseFloat(form.sell_price) - parseFloat(form.buy_price)))} per unit
                 </span>
               </div>
             )}
@@ -563,21 +581,21 @@ export default function ProductsPage() {
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-gray-400">Total restock cost</span>
                   <span className="text-red-400 font-bold text-sm">
-                    ${(parseFloat(restockForm.unit_cost) * parseInt(restockForm.quantity || 0)).toFixed(2)}
+                    {formatMoney((parseFloat(restockForm.unit_cost) * parseInt(restockForm.quantity || 0)))}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-gray-400">New average buy price</span>
                   <span className="text-yellow-400 font-bold text-sm">
-                    ${(() => {
+                    {formatMoney((() => {
                       const currentStock = restockingProduct.stock || 0
                       const currentPrice = restockingProduct.buy_price || 0
                       const newQty = parseInt(restockForm.quantity) || 0
                       const newPrice = parseFloat(restockForm.unit_cost) || 0
                       const totalUnits = currentStock + newQty
                       const totalValue = (currentStock * currentPrice) + (newQty * newPrice)
-                      return totalUnits > 0 ? (totalValue / totalUnits).toFixed(2) : newPrice.toFixed(2)
-                    })()}
+                      return totalUnits > 0 ? totalValue / totalUnits : newPrice
+                    })())}
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 pt-1">
@@ -643,13 +661,20 @@ export default function ProductsPage() {
                     {stockMovements.map((m, i) => (
                       <tr key={i} className="border-b border-gray-800 hover:bg-gray-800 transition">
                         <td className="px-3 py-3">
-                          <span className="text-xs bg-green-950 text-green-400 border border-green-800 px-2 py-0.5 rounded-full font-semibold">
+                          <span
+                            title={m.note || ''}
+                            className={`text-xs px-2 py-0.5 rounded-full font-semibold border ${m.type === 'adjustment'
+                              ? 'bg-blue-950 text-blue-400 border-blue-800'
+                              : 'bg-green-950 text-green-400 border-green-800'}`}
+                          >
                             {m.type}
                           </span>
                         </td>
-                        <td className="px-3 py-3 text-green-400 font-bold">+{m.quantity}</td>
-                        <td className="px-3 py-3 text-gray-300">${parseFloat(m.unit_cost).toFixed(2)}</td>
-                        <td className="px-3 py-3 text-red-400 font-semibold">${parseFloat(m.total_cost).toFixed(2)}</td>
+                        <td className={`px-3 py-3 font-bold ${m.quantity < 0 ? 'text-red-400' : 'text-green-400'}`}>
+                          {m.quantity > 0 ? '+' : ''}{m.quantity}
+                        </td>
+                        <td className="px-3 py-3 text-gray-300">{formatMoney(parseFloat(m.unit_cost))}</td>
+                        <td className="px-3 py-3 text-red-400 font-semibold">{formatMoney(parseFloat(m.total_cost))}</td>
                         <td className="px-3 py-3 text-gray-400 text-xs">{m.supplier_name || '—'}</td>
                         <td className="px-3 py-3 text-gray-400 text-xs">{m.date}</td>
                       </tr>

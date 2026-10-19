@@ -59,7 +59,7 @@ export function buildSaleStatements(cart, customer, paymentMethod, receiptNumber
   statements.push({
     sql: `INSERT INTO transactions
           (description, type, category, amount, payment_method, reference_id, reference_type, date)
-          VALUES (?, 'income', 'Sales', ?, ?, ?, 'sale', DATE('now'))`,
+          VALUES (?, 'income', 'Sales', ?, ?, ?, 'sale', DATE('now', 'localtime'))`,
     params: [`Sale #${receiptNumber} — ${customerName}`, total, paymentMethod, ref(0)],
   })
 
