@@ -1,22 +1,13 @@
 {
   "identifier": "default",
+  "description": "Permissions for the main window. Keep this list as short as possible.",
   "local": true,
   "windows": ["main"],
   "permissions": [
     "core:default",
     "sql:default",
-    "sql:allow-load",
     "sql:allow-execute",
-    "sql:allow-select",
-    "fs:default",
-    "fs:allow-write-text-file",
-    "fs:allow-write-file",
-    "fs:allow-read-file",
-    "fs:allow-copy-file",
-    "fs:scope-download-recursive",
-    "fs:scope-document-recursive",
-    "fs:scope-appdata-recursive",
     "dialog:default",
-    "dialog:allow-save"
+    "fs:allow-write-text-file"
   ]
 }

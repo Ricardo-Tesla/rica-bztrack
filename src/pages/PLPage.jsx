@@ -14,7 +14,7 @@ export default function PLPage() {
       setLoading(true)
       const data = await getPLReport()
       setReport(data)
-    } catch (err) {
+    } catch {
       setError('Failed to load report')
     } finally {
       setLoading(false)

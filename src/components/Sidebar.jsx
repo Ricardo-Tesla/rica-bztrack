@@ -28,7 +28,7 @@ export default function Sidebar({ activePage, onNavigate }) {
       } else if (!result.cancelled) {
         setBackupStatus({ type: 'error', message: result.error || 'Backup failed' })
       }
-    } catch (err) {
+    } catch {
       setBackupStatus({ type: 'error', message: 'Backup failed' })
     } finally {
       setBacking(false)

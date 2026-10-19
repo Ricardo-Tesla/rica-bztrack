@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getDashboardData } from '../services/dashboardService'
-import { formatMoney, parseDbDate } from '../utils/format'
+import { formatMoney, formatDateTime } from '../utils/format'
 
 export default function DashboardPage() {
   const [data, setData] = useState(null)
@@ -14,18 +14,11 @@ export default function DashboardPage() {
       setLoading(true)
       const result = await getDashboardData()
       setData(result)
-    } catch (err) {
+    } catch {
       setError('Failed to load dashboard')
     } finally {
       setLoading(false)
     }
-  }
-
-  function formatDate(dateStr) {
-    if (!dateStr) return '—'
-    return parseDbDate(dateStr).toLocaleDateString('en-US', {
-      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-    })
   }
 
   function getGreeting() {
@@ -169,7 +162,7 @@ export default function DashboardPage() {
                     <td className="px-5 py-3 text-green-400 font-semibold text-xs">
                       {formatMoney(parseFloat(s.total))}
                     </td>
-                    <td className="px-5 py-3 text-gray-500 text-xs">{formatDate(s.created_at)}</td>
+                    <td className="px-5 py-3 text-gray-500 text-xs">{formatDateTime(s.created_at)}</td>
                   </tr>
                 ))
               )}

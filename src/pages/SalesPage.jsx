@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { getSales } from '../services/salesService'
+import { getSales, voidSale } from '../services/salesService'
+import { confirmDialog } from '../utils/dialogs'
 import { downloadReceipt } from '../utils/receiptPrinter'
-import { formatMoney, parseDbDate } from '../utils/format'
+import { formatMoney, formatDateTime } from '../utils/format'
 
 export default function SalesPage() {
   const [sales, setSales] = useState([])
@@ -9,6 +10,7 @@ export default function SalesPage() {
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [selectedSale, setSelectedSale] = useState(null)
+  const [voiding, setVoiding] = useState(false)
 
   useEffect(() => { loadSales() }, [])
 
@@ -17,19 +19,11 @@ export default function SalesPage() {
       setLoading(true)
       const data = await getSales()
       setSales(data)
-    } catch (err) {
+    } catch {
       setError('Failed to load sales')
     } finally {
       setLoading(false)
     }
-  }
-
-  function formatDate(dateStr) {
-    if (!dateStr) return '—'
-    return parseDbDate(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric', month: 'short', day: 'numeric',
-      hour: '2-digit', minute: '2-digit'
-    })
   }
 
   const filtered = sales.filter(s =>
@@ -38,8 +32,30 @@ export default function SalesPage() {
     (s.payment_method || '').toLowerCase().includes(search.toLowerCase())
   )
 
-  const totalRevenue = sales.reduce((a, s) => a + s.total, 0)
-  const totalSales = sales.length
+  async function handleVoid(sale) {
+    const ok = await confirmDialog(
+      `Void sale ${sale.receipt_number} (${formatMoney(sale.total)})?\n\n` +
+      'The items go back into stock and a refund is recorded in Transactions. This cannot be undone.',
+      { title: 'Void sale', okLabel: 'Void sale', danger: true }
+    )
+    if (!ok) return
+    try {
+      setVoiding(true)
+      setError('')
+      await voidSale(sale)
+      setSelectedSale(null)
+      await loadSales()
+    } catch (err) {
+      setError('Failed to void sale: ' + (err?.message || err))
+    } finally {
+      setVoiding(false)
+    }
+  }
+
+  // Voided sales are listed but not counted
+  const completed = sales.filter(s => s.status !== 'voided')
+  const totalRevenue = completed.reduce((a, s) => a + s.total, 0)
+  const totalSales = completed.length
   const avgSale = totalSales > 0 ? totalRevenue / totalSales : 0
 
   return (
@@ -131,6 +147,11 @@ export default function SalesPage() {
                     <span className="font-mono text-xs bg-gray-800 text-yellow-400 px-2 py-1 rounded">
                       {s.receipt_number}
                     </span>
+                    {s.status === 'voided' && (
+                      <span className="ml-2 text-xs bg-red-950 text-red-400 border border-red-800 px-2 py-0.5 rounded-full font-semibold">
+                        Voided
+                      </span>
+                    )}
                   </td>
                   <td className="px-5 py-4 text-white font-medium">
                     {s.customer_name || 'Walk-in Customer'}
@@ -143,11 +164,11 @@ export default function SalesPage() {
                       {s.payment_method}
                     </span>
                   </td>
-                  <td className="px-5 py-4 text-yellow-400 font-bold">
+                  <td className={`px-5 py-4 font-bold ${s.status === 'voided' ? 'text-gray-500 line-through' : 'text-yellow-400'}`}>
                     {formatMoney(parseFloat(s.total))}
                   </td>
                   <td className="px-5 py-4 text-gray-400 text-xs">
-                    {formatDate(s.created_at)}
+                    {formatDateTime(s.created_at)}
                   </td>
                   <td className="px-5 py-4">
                     <button
@@ -172,7 +193,10 @@ export default function SalesPage() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-xl font-bold text-yellow-400">Sale Details</h2>
-                <p className="text-gray-400 text-xs mt-0.5">{selectedSale.receipt_number}</p>
+                <p className="text-gray-400 text-xs mt-0.5">
+                  {selectedSale.receipt_number}
+                  {selectedSale.status === 'voided' && <span className="ml-2 text-red-400 font-semibold">· VOIDED</span>}
+                </p>
               </div>
               <button
                 onClick={() => setSelectedSale(null)}
@@ -195,7 +219,7 @@ export default function SalesPage() {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-400">Date</span>
-                <span className="text-white font-medium">{formatDate(selectedSale.created_at)}</span>
+                <span className="text-white font-medium">{formatDateTime(selectedSale.created_at)}</span>
               </div>
             </div>
 
@@ -226,6 +250,15 @@ export default function SalesPage() {
               >
                 🖨️ Print Receipt
               </button>
+              {selectedSale.status !== 'voided' && (
+                <button
+                  onClick={() => handleVoid(selectedSale)}
+                  disabled={voiding}
+                  className="flex-1 border border-red-800 hover:border-red-500 text-red-400 hover:text-red-300 disabled:opacity-50 font-bold py-2.5 rounded-lg transition text-sm"
+                >
+                  {voiding ? 'Voiding...' : '↩ Void Sale'}
+                </button>
+              )}
               <button
                 onClick={() => setSelectedSale(null)}
                 className="flex-1 bg-yellow-400 hover:bg-yellow-300 text-black font-bold py-2.5 rounded-lg transition text-sm"

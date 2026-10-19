@@ -4,8 +4,8 @@ import { getCustomers } from '../services/customerService'
 import { completeSale } from '../services/salesService'
 import { downloadReceipt } from '../utils/receiptPrinter'
 import { formatMoney } from '../utils/format'
+import { PAYMENT_METHODS } from '../utils/constants'
 
-const PAYMENT_METHODS = ['Cash', 'Card', 'Mobile Money', 'Bank Transfer']
 
 export default function POSPage() {
   const [products, setProducts] = useState([])
@@ -27,7 +27,7 @@ export default function POSPage() {
       const [prods, custs] = await Promise.all([getProducts(), getCustomers()])
       setProducts(prods)
       setCustomers(custs)
-    } catch (err) {
+    } catch {
       setError('Failed to load data')
     } finally {
       setLoading(false)

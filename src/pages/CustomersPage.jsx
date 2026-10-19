@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getCustomers, addCustomer, updateCustomer, deleteCustomer } from '../services/customerService'
-import { formatMoney, parseDbDate } from '../utils/format'
+import { formatMoney, formatDate } from '../utils/format'
+import { confirmDialog } from '../utils/dialogs'
 
 const emptyForm = { name: '', phone: '', email: '', address: '' }
 
@@ -22,7 +23,7 @@ export default function CustomersPage() {
       setLoading(true)
       const data = await getCustomers()
       setCustomers(data)
-    } catch (err) {
+    } catch {
       setError('Failed to load customers')
     } finally {
       setLoading(false)
@@ -60,7 +61,7 @@ export default function CustomersPage() {
       }
       setShowModal(false)
       await loadCustomers()
-    } catch (err) {
+    } catch {
       setError('Failed to save customer')
     } finally {
       setSaving(false)
@@ -68,21 +69,14 @@ export default function CustomersPage() {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Delete this customer?\n\nIf it has history, it will be archived (hidden) instead, so your past sales and reports stay correct.')) return
+    if (!(await confirmDialog('Delete this customer?\n\nIf it has history, it will be archived (hidden) instead, so your past sales and reports stay correct.', { okLabel: 'Delete', danger: true }))) return
     try {
       const result = await deleteCustomer(id)
       await loadCustomers()
       if (result === 'archived') setNotice('This customer has history, so it was archived (hidden) instead of deleted.')
-    } catch (err) {
+    } catch {
       setError('Failed to delete customer')
     }
-  }
-
-  function formatDate(dateStr) {
-    if (!dateStr) return 'Never'
-    return parseDbDate(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric', month: 'short', day: 'numeric'
-    })
   }
 
   const filtered = customers.filter(c =>
@@ -193,7 +187,7 @@ export default function CustomersPage() {
                   <td className="px-5 py-4">
                     <div className="font-semibold text-white">{c.name}</div>
                     <div className="text-xs text-gray-500 mt-0.5">
-                      Since {formatDate(c.created_at)}
+                      Since {formatDate(c.created_at, 'Never')}
                     </div>
                   </td>
                   <td className="px-5 py-4 text-gray-300">{c.phone || <span className="text-gray-600">—</span>}</td>
@@ -208,7 +202,7 @@ export default function CustomersPage() {
                     {formatMoney(parseFloat(c.total_spent || 0))}
                   </td>
                   <td className="px-5 py-4 text-gray-400 text-xs">
-                    {formatDate(c.last_visit)}
+                    {formatDate(c.last_visit, 'Never')}
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex items-center gap-2 justify-end">

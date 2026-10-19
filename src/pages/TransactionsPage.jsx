@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import { getTransactions, addTransaction, getTransactionSummary } from '../services/transactionService'
-import { formatMoney, parseDbDate, todayLocal } from '../utils/format'
+import { formatMoney, todayLocal, formatDate } from '../utils/format'
+import { PAYMENT_METHODS, TRANSACTION_CATEGORIES } from '../utils/constants'
 
-const PAYMENT_METHODS = ['Cash', 'Card', 'Mobile Money', 'Bank Transfer']
-const CATEGORIES = ['Sales', 'Rent', 'Salary', 'Utilities', 'Marketing', 'Transport', 'Stock Purchase', 'Maintenance', 'Other']
 
 const emptyForm = () => ({
   description: '', type: 'income', category: 'Sales',
@@ -33,7 +32,7 @@ export default function TransactionsPage() {
       ])
       setTransactions(txns)
       setSummary(sum)
-    } catch (err) {
+    } catch {
       setError('Failed to load transactions')
     } finally {
       setLoading(false)
@@ -51,18 +50,11 @@ export default function TransactionsPage() {
       setForm(emptyForm())
       setShowModal(false)
       await loadData()
-    } catch (err) {
+    } catch {
       setError('Failed to save transaction')
     } finally {
       setSaving(false)
     }
-  }
-
-  function formatDate(dateStr) {
-    if (!dateStr) return '—'
-    return parseDbDate(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric', month: 'short', day: 'numeric'
-    })
   }
 
   const filtered = transactions
@@ -278,7 +270,7 @@ export default function TransactionsPage() {
                   value={form.category}
                   onChange={e => setForm({ ...form, category: e.target.value })}
                 >
-                  {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                  {TRANSACTION_CATEGORIES.map(c => <option key={c}>{c}</option>)}
                 </select>
                 <p className="text-xs text-gray-500 mt-1.5">
                   {form.category === 'Stock Purchase'

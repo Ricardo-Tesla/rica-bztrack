@@ -1,5 +1,6 @@
 import { getDb, runTransaction, ref } from './db'
 import { generateReceiptNumber, validateSale } from '../utils/calculations'
+import { todayLocal } from '../utils/format'
 
 const MAX_RECEIPT_ATTEMPTS = 5
 
@@ -92,22 +93,24 @@ export async function completeSale(cart, customer, paymentMethod, run = runTrans
   }
 }
 
-// Get all sales with their items
+// Get all sales with their items — two queries in total, however many sales
 export async function getSales() {
   const db = await getDb()
   const sales = await db.select(`
     SELECT * FROM sales
     ORDER BY created_at DESC
   `)
+  const items = await db.select('SELECT * FROM sale_items ORDER BY id')
+  return attachItems(sales, items)
+}
 
-  // Attach items to each sale
-  for (const sale of sales) {
-    sale.items = await db.select(
-      'SELECT * FROM sale_items WHERE sale_id = ?',
-      [sale.id]
-    )
+export function attachItems(sales, items) {
+  const bySale = new Map()
+  for (const item of items) {
+    if (!bySale.has(item.sale_id)) bySale.set(item.sale_id, [])
+    bySale.get(item.sale_id).push(item)
   }
-
+  for (const sale of sales) sale.items = bySale.get(sale.id) || []
   return sales
 }
 
@@ -122,4 +125,48 @@ export async function getSaleById(id) {
     [id]
   )
   return sale
+}
+
+// Void (cancel) a sale, all in one transaction:
+// - the sale is marked 'voided' (Dashboard, P&L and customer totals ignore it)
+// - every item goes back into stock, recorded in the stock history as a return
+// - the refund is logged in Transactions as money out
+export function buildVoidSaleStatements(sale, reason = '') {
+  const today = todayLocal()
+  const note = `Sale #${sale.receipt_number} voided${reason ? ` — ${reason}` : ''}`
+
+  const statements = [
+    {
+      sql: `UPDATE sales SET status = 'voided' WHERE id = ? AND status = 'completed'`,
+      params: [sale.id],
+      expectChanges: 1,
+      errorMessage: 'This sale has already been voided.',
+    },
+  ]
+
+  for (const item of sale.items || []) {
+    statements.push({
+      sql: 'UPDATE products SET stock = stock + ? WHERE id = ?',
+      params: [item.quantity, item.product_id],
+    })
+    statements.push({
+      sql: `INSERT INTO stock_movements
+            (product_id, product_name, type, quantity, unit_cost, total_cost, note, date)
+            VALUES (?, ?, 'return', ?, ?, 0, ?, ?)`,
+      params: [item.product_id, item.product_name, item.quantity, item.buy_price || 0, note, today],
+    })
+  }
+
+  statements.push({
+    sql: `INSERT INTO transactions
+          (description, type, category, amount, payment_method, reference_id, reference_type, date)
+          VALUES (?, 'expense', 'Refund', ?, ?, ?, 'sale_void', ?)`,
+    params: [`Refund — ${note}`, sale.total, sale.payment_method || 'Cash', sale.id, today],
+  })
+
+  return statements
+}
+
+export async function voidSale(sale, reason = '', run = runTransaction) {
+  await run(buildVoidSaleStatements(sale, reason))
 }

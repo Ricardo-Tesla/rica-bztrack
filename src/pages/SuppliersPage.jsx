@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getSuppliers, addSupplier, updateSupplier, deleteSupplier } from '../services/supplierService'
+import { confirmDialog } from '../utils/dialogs'
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState([])
@@ -20,7 +21,7 @@ export default function SuppliersPage() {
       setLoading(true)
       const data = await getSuppliers()
       setSuppliers(data)
-    } catch (err) {
+    } catch {
       setError('Failed to load suppliers')
     } finally {
       setLoading(false)
@@ -61,7 +62,7 @@ export default function SuppliersPage() {
       setForm(emptyForm)
       setShowModal(false)
       await loadSuppliers()
-    } catch (err) {
+    } catch {
       setError('Failed to save supplier')
     } finally {
       setSaving(false)
@@ -69,12 +70,12 @@ export default function SuppliersPage() {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Delete this supplier?\n\nIf it has history, it will be archived (hidden) instead, so your past sales and reports stay correct.')) return
+    if (!(await confirmDialog('Delete this supplier?\n\nIf it has history, it will be archived (hidden) instead, so your past sales and reports stay correct.', { okLabel: 'Delete', danger: true }))) return
     try {
       const result = await deleteSupplier(id)
       await loadSuppliers()
       if (result === 'archived') setNotice('This supplier has history, so it was archived (hidden) instead of deleted.')
-    } catch (err) {
+    } catch {
       setError('Failed to delete supplier')
     }
   }

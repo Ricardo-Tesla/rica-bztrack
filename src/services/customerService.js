@@ -10,7 +10,7 @@ export async function getCustomers() {
       COALESCE(SUM(s.total), 0) as total_spent,
       MAX(s.created_at) as last_visit
     FROM customers c
-    LEFT JOIN sales s ON c.id = s.customer_id
+    LEFT JOIN sales s ON c.id = s.customer_id AND s.status = 'completed'
     WHERE c.archived = 0
     GROUP BY c.id
     ORDER BY c.name ASC

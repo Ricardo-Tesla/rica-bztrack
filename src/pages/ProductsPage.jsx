@@ -3,10 +3,9 @@ import { getProducts, addProduct, updateProduct, deleteProduct } from '../servic
 import { getSuppliers } from '../services/supplierService'
 import { restockProduct, getStockMovements } from '../services/restockService'
 import { formatMoney, todayLocal } from '../utils/format'
+import { PAYMENT_METHODS, PRODUCT_CATEGORIES, PRODUCT_UNITS } from '../utils/constants'
+import { confirmDialog } from '../utils/dialogs'
 
-const CATEGORIES = ['Electronics', 'Clothing', 'Food', 'Hardware', 'Furniture', 'Other']
-const UNITS = ['Piece', 'Kg', 'Litre', 'Box', 'Pack', 'Dozen']
-const PAYMENT_METHODS = ['Cash', 'Card', 'Mobile Money', 'Bank Transfer']
 
 const emptyForm = {
   name: '', sku: '', category: 'Other', unit: 'Piece',
@@ -49,7 +48,7 @@ export default function ProductsPage() {
       const [prods, sups] = await Promise.all([getProducts(), getSuppliers()])
       setProducts(prods)
       setSuppliers(sups)
-    } catch (err) {
+    } catch {
       setError('Failed to load products')
     } finally {
       setLoading(false)
@@ -125,12 +124,12 @@ export default function ProductsPage() {
   }
 
   async function handleDelete(id) {
-    if (!confirm('Delete this product?\n\nIf it has history, it will be archived (hidden) instead, so your past sales and reports stay correct.')) return
+    if (!(await confirmDialog('Delete this product?\n\nIf it has history, it will be archived (hidden) instead, so your past sales and reports stay correct.', { okLabel: 'Delete', danger: true }))) return
     try {
       const result = await deleteProduct(id)
       await loadData()
       if (result === 'archived') setNotice('This product has history, so it was archived (hidden) instead of deleted.')
-    } catch (err) {
+    } catch {
       setError('Failed to delete product')
     }
   }
@@ -380,7 +379,7 @@ export default function ProductsPage() {
                   value={form.category}
                   onChange={e => setForm({ ...form, category: e.target.value })}
                 >
-                  {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                  {PRODUCT_CATEGORIES.map(c => <option key={c}>{c}</option>)}
                 </select>
               </div>
               <div>
@@ -390,7 +389,7 @@ export default function ProductsPage() {
                   value={form.unit}
                   onChange={e => setForm({ ...form, unit: e.target.value })}
                 >
-                  {UNITS.map(u => <option key={u}>{u}</option>)}
+                  {PRODUCT_UNITS.map(u => <option key={u}>{u}</option>)}
                 </select>
               </div>
               <div>

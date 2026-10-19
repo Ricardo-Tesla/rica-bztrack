@@ -56,6 +56,7 @@ Rica BizTrack is built for small business owners who:
 - Search by receipt number, customer, or payment method
 - View sale details including itemized breakdown
 - Print receipt as thermal-format .txt file
+- Void a sale — items go back into stock and the refund is recorded
 
 ### 📦 Products
 - Add, edit, and delete products
@@ -88,6 +89,7 @@ Rica BizTrack is built for small business owners who:
 - Categories: Rent, Salary, Utilities, Marketing, Transport,
   Maintenance, Other (stock purchases are recorded with Restock, not as expenses)
 - Monthly expense breakdown
+- Edit or delete expenses (the matching transaction is updated too)
 - Auto-creates transaction record on every expense
 
 ### 📈 Profit & Loss

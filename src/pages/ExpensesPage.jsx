@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { getExpenses, addExpense, deleteExpense, EXPENSE_CATEGORIES } from '../services/expenseService'
-import { formatMoney, parseDbDate, todayLocal } from '../utils/format'
+import { getExpenses, addExpense, updateExpense, deleteExpense, EXPENSE_CATEGORIES } from '../services/expenseService'
+import { formatMoney, parseDbDate, todayLocal, formatDate } from '../utils/format'
+import { PAYMENT_METHODS } from '../utils/constants'
+import { confirmDialog } from '../utils/dialogs'
 
-const PAYMENT_METHODS = ['Cash', 'Card', 'Mobile Money', 'Bank Transfer']
 
 const emptyForm = () => ({
   description: '', category: 'Rent',
@@ -17,6 +18,7 @@ export default function ExpensesPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState(emptyForm)
+  const [editingExpense, setEditingExpense] = useState(null)
   const [search, setSearch] = useState('')
 
   useEffect(() => { loadExpenses() }, [])
@@ -26,7 +28,7 @@ export default function ExpensesPage() {
       setLoading(true)
       const data = await getExpenses()
       setExpenses(data)
-    } catch (err) {
+    } catch {
       setError('Failed to load expenses')
     } finally {
       setLoading(false)
@@ -40,32 +42,30 @@ export default function ExpensesPage() {
     try {
       setSaving(true)
       setError('')
-      await addExpense(form)
+      if (editingExpense) {
+        await updateExpense(editingExpense.id, form)
+      } else {
+        await addExpense(form)
+      }
       setForm(emptyForm())
+      setEditingExpense(null)
       setShowModal(false)
       await loadExpenses()
     } catch (err) {
-      setError('Failed to save expense')
+      setError('Failed to save expense: ' + (err?.message || err))
     } finally {
       setSaving(false)
     }
   }
 
   async function handleDelete(id) {
-    if (!confirm('Delete this expense?')) return
+    if (!(await confirmDialog('Delete this expense?', { okLabel: 'Delete', danger: true }))) return
     try {
       await deleteExpense(id)
       await loadExpenses()
-    } catch (err) {
+    } catch {
       setError('Failed to delete expense')
     }
-  }
-
-  function formatDate(dateStr) {
-    if (!dateStr) return '—'
-    return parseDbDate(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric', month: 'short', day: 'numeric'
-    })
   }
 
   const filtered = expenses.filter(e =>
@@ -137,7 +137,7 @@ export default function ExpensesPage() {
           className="bg-gray-900 border border-gray-700 focus:border-yellow-400 rounded-lg px-4 py-2.5 text-sm outline-none text-white w-80 transition"
         />
         <button
-          onClick={() => { setForm(emptyForm()); setShowModal(true); setError('') }}
+          onClick={() => { setEditingExpense(null); setForm(emptyForm()); setShowModal(true); setError('') }}
           className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-black font-bold px-5 py-2.5 rounded-lg transition text-sm"
         >
           <span className="text-lg leading-none">+</span> Add Expense
@@ -198,7 +198,21 @@ export default function ExpensesPage() {
                     -{formatMoney(parseFloat(e.amount))}
                   </td>
                   <td className="px-5 py-4 text-gray-400 text-xs">{formatDate(e.date)}</td>
-                  <td className="px-5 py-4">
+                  <td className="px-5 py-4 whitespace-nowrap">
+                    <button
+                      onClick={() => {
+                        setEditingExpense(e)
+                        setForm({
+                          description: e.description, category: e.category, amount: e.amount,
+                          date: e.date, payment_method: e.payment_method || 'Cash',
+                        })
+                        setError('')
+                        setShowModal(true)
+                      }}
+                      className="text-yellow-400 hover:text-yellow-300 text-xs border border-yellow-800 hover:border-yellow-600 px-3 py-1.5 rounded-lg transition mr-2"
+                    >
+                      Edit
+                    </button>
                     <button
                       onClick={() => handleDelete(e.id)}
                       className="text-red-400 hover:text-red-300 text-xs border border-red-900 hover:border-red-700 px-3 py-1.5 rounded-lg transition"
@@ -233,7 +247,7 @@ export default function ExpensesPage() {
           <div className="bg-gray-900 border border-gray-700 rounded-2xl p-7 w-full max-w-md shadow-2xl">
 
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-yellow-400">Add Expense</h2>
+              <h2 className="text-xl font-bold text-yellow-400">{editingExpense ? 'Edit Expense' : 'Add Expense'}</h2>
               <button
                 onClick={() => setShowModal(false)}
                 className="text-gray-500 hover:text-gray-300 text-xl leading-none transition"
@@ -265,7 +279,8 @@ export default function ExpensesPage() {
                   value={form.category}
                   onChange={e => setForm({ ...form, category: e.target.value })}
                 >
-                  {EXPENSE_CATEGORIES.map(c => <option key={c}>{c}</option>)}
+                  {(EXPENSE_CATEGORIES.includes(form.category) ? EXPENSE_CATEGORIES : [...EXPENSE_CATEGORIES, form.category])
+                    .map(c => <option key={c}>{c}</option>)}
                 </select>
                 <p className="text-xs text-gray-500 mt-1.5">
                   Buying stock? Use Products → Restock instead, so its cost is counted when the items sell.
@@ -316,7 +331,7 @@ export default function ExpensesPage() {
                 disabled={saving}
                 className="bg-yellow-400 hover:bg-yellow-300 disabled:opacity-50 text-black font-bold px-6 py-2 rounded-lg text-sm transition"
               >
-                {saving ? 'Saving...' : 'Save Expense'}
+                {saving ? 'Saving...' : editingExpense ? 'Update Expense' : 'Save Expense'}
               </button>
             </div>
           </div>

@@ -11,10 +11,15 @@ const EXPENSE_CATEGORIES = [
 
 export { EXPENSE_CATEGORIES }
 
-// Get all expenses
+// Get all expenses (with the payment method from the linked transaction)
 export async function getExpenses() {
   const db = await getDb()
-  return await db.select('SELECT * FROM expenses ORDER BY date DESC')
+  return await db.select(`
+    SELECT e.*, t.payment_method
+    FROM expenses e
+    LEFT JOIN transactions t ON t.reference_type = 'expense' AND t.reference_id = e.id
+    ORDER BY e.date DESC, e.id DESC
+  `)
 }
 
 export function buildAddExpenseStatements(expense) {
@@ -43,6 +48,24 @@ export function buildAddExpenseStatements(expense) {
   ]
 }
 
+// Update an expense and its ledger entry together
+export function buildUpdateExpenseStatements(id, expense) {
+  const amount = parseFloat(expense.amount)
+  return [
+    {
+      sql: `UPDATE expenses SET description = ?, category = ?, amount = ?, date = ? WHERE id = ?`,
+      params: [expense.description, expense.category, amount, expense.date, id],
+      expectChanges: 1,
+      errorMessage: 'This expense no longer exists.',
+    },
+    {
+      sql: `UPDATE transactions SET description = ?, category = ?, amount = ?, payment_method = ?, date = ?
+            WHERE reference_type = 'expense' AND reference_id = ?`,
+      params: [expense.description, expense.category, amount, expense.payment_method || 'Cash', expense.date, id],
+    },
+  ]
+}
+
 export function buildDeleteExpenseStatements(id) {
   return [
     {
@@ -59,6 +82,11 @@ export function buildDeleteExpenseStatements(id) {
 // Add an expense (and its transaction record) — both or neither are saved
 export async function addExpense(expense) {
   await runTransaction(buildAddExpenseStatements(expense))
+}
+
+// Update an expense (and its transaction record) — both or neither are changed
+export async function updateExpense(id, expense) {
+  await runTransaction(buildUpdateExpenseStatements(id, expense))
 }
 
 // Delete an expense (and its transaction record) — both or neither are removed
