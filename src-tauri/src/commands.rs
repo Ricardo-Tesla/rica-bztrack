@@ -313,9 +313,16 @@ pub async fn restore_database(
     instances: State<'_, DbInstances>,
     source: String,
 ) -> Result<(), String> {
-    let source = PathBuf::from(&source);
     let live = db_path(&app)?;
+    let pool = get_pool(&instances).await?;
+    restore_into(&pool, Path::new(&source), &live).await?;
+    app.restart();
+}
 
+/// The file work of a restore (no restart), so it can be tested.
+/// On success the pool is closed and the live file has been replaced.
+/// Returns the path of the safety copy.
+async fn restore_into(pool: &Pool<Sqlite>, source: &Path, live: &Path) -> Result<PathBuf, String> {
     if let (Ok(a), Ok(b)) = (source.canonicalize(), live.canonicalize()) {
         if a == b {
             return Err("That is the live database, not a backup file.".into());
@@ -325,36 +332,34 @@ pub async fn restore_database(
     // 1. Copy the backup next to the live database and check it is valid
     let incoming = live.with_extension("db.restore");
     let _ = std::fs::remove_file(&incoming);
-    std::fs::copy(&source, &incoming).map_err(|e| format!("Could not read backup: {e}"))?;
+    std::fs::copy(source, &incoming).map_err(|e| format!("Could not read backup: {e}"))?;
     if let Err(e) = validate_backup(&incoming).await {
         let _ = std::fs::remove_file(&incoming);
         return Err(e);
     }
 
     // 2. Safety copy of the current data
-    let pool = get_pool(&instances).await?;
     let safety_dir = live
         .parent()
         .map(|p| p.join("backups"))
         .ok_or("Invalid database path")?;
     std::fs::create_dir_all(&safety_dir).map_err(|e| e.to_string())?;
     let safety = safety_dir.join(format!("pre-restore-{}.db", unix_time()));
-    if let Err(e) = snapshot_to(&pool, &safety).await {
+    if let Err(e) = snapshot_to(pool, &safety).await {
         let _ = std::fs::remove_file(&incoming);
         return Err(format!("Could not save a safety copy, restore cancelled. {e}"));
     }
 
-    // 3. Close every connection, swap the files, and restart
+    // 3. Close every connection and swap the files
     pool.close().await;
     for ext in ["db-wal", "db-shm"] {
         let _ = std::fs::remove_file(live.with_extension(ext));
     }
-    if let Err(e) = std::fs::rename(&incoming, &live) {
-        // The old database is untouched; restart so it is reopened.
+    if let Err(e) = std::fs::rename(&incoming, live) {
+        // The old database is untouched; the restart reopens it.
         eprintln!("Restore failed while replacing the database: {e}");
     }
-
-    app.restart();
+    Ok(safety)
 }
 
 #[cfg(test)]
@@ -498,6 +503,307 @@ mod tests {
             std::fs::write(&junk, b"this is not a database").unwrap();
             assert!(validate_backup(&junk).await.is_err());
             assert!(validate_backup(&dir.join("missing.db")).await.is_err());
+        });
+    }
+
+    // ── More transaction cases ───────────────────────────
+
+    #[test]
+    fn every_param_type_is_stored_correctly() {
+        tauri::async_runtime::block_on(async {
+            let dir = temp_dir("params");
+            let pool = test_pool(&dir.join("t.db")).await;
+            sqlx::query("CREATE TABLE p (b, f, n, s, i, o)").execute(&pool).await.unwrap();
+            run_statements(&pool, &[stmt(
+                "INSERT INTO p VALUES (?, ?, ?, ?, ?, ?)",
+                vec![
+                    true.into(), 1.5.into(), Value::Null, "Ikawa — café ☕".into(),
+                    9_007_199_254_740_993_i64.into(), serde_json::json!({ "a": [1, 2] }),
+                ],
+            )]).await.unwrap();
+
+            let row = sqlx::query("SELECT b, f, n, s, i, o, typeof(n) FROM p").fetch_one(&pool).await.unwrap();
+            assert_eq!(row.get::<i64, _>(0), 1);
+            assert_eq!(row.get::<f64, _>(1), 1.5);
+            assert_eq!(row.get::<String, _>(6), "null");
+            assert_eq!(row.get::<String, _>(3), "Ikawa — café ☕");
+            assert_eq!(row.get::<i64, _>(4), 9_007_199_254_740_993);
+            assert_eq!(row.get::<String, _>(5), r#"{"a":[1,2]}"#);
+        });
+    }
+
+    #[test]
+    fn a_bad_ref_cancels_everything() {
+        tauri::async_runtime::block_on(async {
+            let dir = temp_dir("badref");
+            let pool = test_pool(&dir.join("t.db")).await;
+            let err = run_statements(&pool, &[
+                stmt("INSERT INTO sales (receipt_number) VALUES ('R1')", vec![]),
+                // refers to itself / a later statement
+                stmt("INSERT INTO sale_items (sale_id, product_id, product_name) VALUES (?, 1, 'Rice')",
+                     vec![serde_json::json!({ "$ref": 5 })]),
+            ]).await.unwrap_err();
+            assert_eq!(err, "Invalid $ref 5");
+            assert_eq!(count(&pool, "sales").await, 0);
+            assert_eq!(count(&pool, "sale_items").await, 0);
+        });
+    }
+
+    #[test]
+    fn a_sql_error_in_the_last_statement_cancels_the_earlier_ones() {
+        tauri::async_runtime::block_on(async {
+            let dir = temp_dir("sqlerr");
+            let pool = test_pool(&dir.join("t.db")).await;
+            let err = run_statements(&pool, &[
+                stmt("INSERT INTO sales (receipt_number) VALUES ('R1')", vec![]),
+                stmt("UPDATE products SET stock = stock - 1 WHERE id = 1", vec![]),
+                stmt("INSERT INTO no_such_table VALUES (1)", vec![]),
+            ]).await.unwrap_err();
+            assert!(err.contains("no such table"), "{err}");
+            assert_eq!(count(&pool, "sales").await, 0);
+            let stock: i64 = sqlx::query("SELECT stock FROM products").fetch_one(&pool).await.unwrap().get(0);
+            assert_eq!(stock, 5);
+        });
+    }
+
+    #[test]
+    fn expect_changes_without_a_message_uses_the_default_text() {
+        tauri::async_runtime::block_on(async {
+            let dir = temp_dir("defaultmsg");
+            let pool = test_pool(&dir.join("t.db")).await;
+            let mut s = stmt("UPDATE products SET stock = 0 WHERE id = 999", vec![]);
+            s.expect_changes = Some(1);
+            let err = run_statements(&pool, &[s]).await.unwrap_err();
+            assert_eq!(err, "Operation cancelled: data changed unexpectedly");
+
+            // expect_changes = 0 is honoured too
+            let mut zero = stmt("UPDATE products SET stock = 1 WHERE id = 1", vec![]);
+            zero.expect_changes = Some(0);
+            assert!(run_statements(&pool, &[zero]).await.is_err());
+        });
+    }
+
+    #[test]
+    fn an_empty_list_does_nothing() {
+        tauri::async_runtime::block_on(async {
+            let dir = temp_dir("empty");
+            let pool = test_pool(&dir.join("t.db")).await;
+            assert!(run_statements(&pool, &[]).await.unwrap().is_empty());
+        });
+    }
+
+    #[test]
+    fn statements_are_read_from_the_apps_json() {
+        let json = r#"[{"sql":"SELECT 1","params":[1,{"$ref":0}],"expectChanges":1,"errorMessage":"x"},{"sql":"SELECT 2"}]"#;
+        let list: Vec<TxStatement> = serde_json::from_str(json).unwrap();
+        assert_eq!(list[0].expect_changes, Some(1));
+        assert_eq!(list[0].error_message.as_deref(), Some("x"));
+        assert!(list[1].params.is_empty());
+        assert_eq!(list[1].expect_changes, None);
+        let out = serde_json::to_string(&TxResult { rows_affected: 2, last_insert_id: 7 }).unwrap();
+        assert_eq!(out, r#"{"rowsAffected":2,"lastInsertId":7}"#);
+    }
+
+    #[test]
+    fn two_tills_selling_at_once_never_oversell() {
+        tauri::async_runtime::block_on(async {
+            let dir = temp_dir("race");
+            let pool = test_pool(&dir.join("t.db")).await; // Rice stock = 5
+            let mut tasks = Vec::new();
+            for i in 0..12 {
+                let pool = pool.clone();
+                tasks.push(tauri::async_runtime::spawn(async move {
+                    let mut take = stmt("UPDATE products SET stock = stock - 1 WHERE id = 1 AND stock >= 1", vec![]);
+                    take.expect_changes = Some(1);
+                    run_statements(&pool, &[
+                        stmt("INSERT INTO sales (receipt_number) VALUES (?)", vec![format!("R{i}").into()]),
+                        take,
+                    ]).await
+                }));
+            }
+            let mut ok = 0;
+            for t in tasks {
+                if t.await.unwrap().is_ok() { ok += 1; }
+            }
+            assert_eq!(ok, 5);
+            assert_eq!(count(&pool, "sales").await, 5);
+            let stock: i64 = sqlx::query("SELECT stock FROM products").fetch_one(&pool).await.unwrap().get(0);
+            assert_eq!(stock, 0);
+        });
+    }
+
+    // ── Backups ──────────────────────────────────────────
+
+    #[test]
+    fn a_backup_into_a_missing_folder_fails_cleanly() {
+        tauri::async_runtime::block_on(async {
+            let dir = temp_dir("nofolder");
+            let pool = test_pool(&dir.join("live.db")).await;
+            let target = dir.join("does").join("not").join("exist").join("b.db");
+            let err = snapshot_to(&pool, &target).await.unwrap_err();
+            assert!(err.starts_with("Backup failed"), "{err}");
+            assert!(!target.exists());
+            assert!(!target.with_extension("db.partial").exists());
+        });
+    }
+
+    #[test]
+    fn the_backup_list_ignores_other_files_and_keep_zero_keeps_one() {
+        tauri::async_runtime::block_on(async {
+            let dir = temp_dir("list");
+            let pool = test_pool(&dir.join("live.db")).await;
+            let b = dir.join("b");
+            std::fs::create_dir_all(&b).unwrap();
+            for other in ["notes.txt", "rica_biztrack_auto_x.txt", "manual.db", "rica_biztrack_auto_2020-01-01.db.partial"] {
+                std::fs::write(b.join(other), b"x").unwrap();
+            }
+            auto_backup_into(&pool, &b, "2026-01-01", 0).await.unwrap();
+            auto_backup_into(&pool, &b, "2026-01-02", 0).await.unwrap();
+            let list = auto_backups_in(&b);
+            assert_eq!(list.len(), 1);
+            assert!(list[0].ends_with("rica_biztrack_auto_2026-01-02.db"));
+            assert!(b.join("manual.db").exists()); // never deletes the user's own files
+            assert!(b.join("notes.txt").exists());
+            assert!(auto_backups_in(&dir.join("missing")).is_empty());
+            for bad in ["2026-1-1", "2026/01/01", "2026-01-01x", ""] {
+                assert!(auto_backup_into(&pool, &b, bad, 3).await.is_err(), "{bad}");
+            }
+        });
+    }
+
+    #[test]
+    fn validate_rejects_a_database_from_another_app() {
+        tauri::async_runtime::block_on(async {
+            let dir = temp_dir("otherapp");
+            let path = dir.join("other.db");
+            let opts = SqliteConnectOptions::new().filename(&path).create_if_missing(true);
+            let mut conn = SqliteConnection::connect_with(&opts).await.unwrap();
+            sqlx::query("CREATE TABLE products (id)").execute(&mut conn).await.unwrap();
+            conn.close().await.unwrap();
+            assert_eq!(validate_backup(&path).await.unwrap_err(), "This file is not a valid Rica BizTrack backup.");
+        });
+    }
+
+    // ── Restore ──────────────────────────────────────────
+
+    #[test]
+    fn restore_replaces_the_data_and_keeps_a_safety_copy() {
+        tauri::async_runtime::block_on(async {
+            let dir = temp_dir("restore");
+            let live = dir.join("rica_biztrack.db");
+            let pool = test_pool(&live).await;
+
+            // Backup with 1 product, then add a second product to the live data
+            let backup = dir.join("backup.db");
+            snapshot_to(&pool, &backup).await.unwrap();
+            sqlx::query("INSERT INTO products (name, sku, stock) VALUES ('Soap', 'S1', 3)").execute(&pool).await.unwrap();
+
+            let safety = restore_into(&pool, &backup, &live).await.unwrap();
+            assert!(pool.is_closed());
+            assert!(!live.with_extension("db.restore").exists());
+
+            let open = |p: PathBuf| async move {
+                let mut c = SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(p)).await.unwrap();
+                let n: i64 = sqlx::query("SELECT COUNT(*) FROM products").fetch_one(&mut c).await.unwrap().get(0);
+                n
+            };
+            assert_eq!(open(live.clone()).await, 1); // back to the backup
+            assert_eq!(open(safety.clone()).await, 2); // the data before the restore is kept
+            assert!(safety.starts_with(dir.join("backups")));
+        });
+    }
+
+    #[test]
+    fn restore_refuses_bad_files_and_leaves_the_live_data_alone() {
+        tauri::async_runtime::block_on(async {
+            let dir = temp_dir("restorebad");
+            let live = dir.join("rica_biztrack.db");
+            let pool = test_pool(&live).await;
+
+            let junk = dir.join("junk.db");
+            std::fs::write(&junk, b"not a database").unwrap();
+            assert!(restore_into(&pool, &junk, &live).await.is_err());
+            assert!(restore_into(&pool, &dir.join("missing.db"), &live).await.unwrap_err().starts_with("Could not read backup"));
+            assert_eq!(
+                restore_into(&pool, &live, &live).await.unwrap_err(),
+                "That is the live database, not a backup file."
+            );
+
+            assert!(!pool.is_closed());
+            assert!(!live.with_extension("db.restore").exists());
+            assert_eq!(count(&pool, "products").await, 1);
+            assert!(!dir.join("backups").exists() || std::fs::read_dir(dir.join("backups")).unwrap().next().is_none());
+        });
+    }
+
+    // ── Migrations ───────────────────────────────────────
+
+    #[test]
+    fn migrations_are_numbered_in_order_without_gaps() {
+        let list = crate::database::get_migrations();
+        for (i, m) in list.iter().enumerate() {
+            assert_eq!(m.version, i as i64 + 1, "migration {}", m.description);
+            assert!(!m.description.trim().is_empty());
+            assert!(matches!(m.kind, tauri_plugin_sql::MigrationKind::Up));
+        }
+    }
+
+    #[test]
+    fn a_fresh_database_is_healthy() {
+        tauri::async_runtime::block_on(async {
+            let dir = temp_dir("fresh");
+            let pool = test_pool(&dir.join("t.db")).await;
+            let ok: String = sqlx::query("PRAGMA integrity_check").fetch_one(&pool).await.unwrap().get(0);
+            assert_eq!(ok, "ok");
+            let fk = sqlx::query("PRAGMA foreign_key_check").fetch_all(&pool).await.unwrap();
+            assert!(fk.is_empty());
+            for table in ["settings", "users", "customer_payments", "stock_movements", "suppliers"] {
+                count(&pool, table).await;
+            }
+        });
+    }
+
+    #[test]
+    fn an_old_shop_database_upgrades_without_losing_data() {
+        tauri::async_runtime::block_on(async {
+            let dir = temp_dir("upgrade");
+            let opts = SqliteConnectOptions::new().filename(dir.join("old.db")).create_if_missing(true);
+            let pool = sqlx::sqlite::SqlitePoolOptions::new().max_connections(1).connect_with(opts).await.unwrap();
+            let all = crate::database::get_migrations();
+
+            // A shop still on version 10
+            for m in all.iter().filter(|m| m.version <= 10) {
+                sqlx::raw_sql(m.sql).execute(&pool).await.unwrap();
+            }
+            sqlx::raw_sql("
+                INSERT INTO products (name, sku, stock, buy_price, sell_price) VALUES ('Rice', 'R1', 7, 900, 1200);
+                INSERT INTO customers (name) VALUES ('Ann');
+                INSERT INTO sales (receipt_number, customer_id, total, payment_method) VALUES ('OLD-1', 1, 2400, 'Cash');
+                INSERT INTO sale_items (sale_id, product_id, product_name, quantity, unit_price, subtotal) VALUES (1, 1, 'Rice', 2, 1200, 2400);
+            ").execute(&pool).await.unwrap();
+
+            for m in all.iter().filter(|m| m.version > 10) {
+                sqlx::raw_sql(m.sql).execute(&pool).await.unwrap();
+            }
+
+            let row = sqlx::query("SELECT total, amount_paid, user_name FROM sales WHERE receipt_number = 'OLD-1'")
+                .fetch_one(&pool).await.unwrap();
+            assert_eq!(row.get::<f64, _>(0), 2400.0);
+            assert_eq!(row.get::<f64, _>(1), 2400.0); // old sales count as fully paid
+            assert!(row.get::<Option<String>, _>(2).is_none());
+            let p = sqlx::query("SELECT stock, vat_exempt, barcode FROM products").fetch_one(&pool).await.unwrap();
+            assert_eq!(p.get::<i64, _>(0), 7);
+            assert_eq!(p.get::<i64, _>(1), 0);
+            assert!(p.get::<Option<String>, _>(2).is_none());
+            let vat: f64 = sqlx::query("SELECT vat_rate FROM sale_items").fetch_one(&pool).await.unwrap().get(0);
+            assert_eq!(vat, 0.0);
+            assert_eq!(count(&pool, "users").await, 0); // the app then asks for first-run setup
+
+            // Barcodes must be unique among active products, but empty ones may repeat
+            sqlx::raw_sql("INSERT INTO products (name, sku, barcode) VALUES ('A', 'A', ''), ('B', 'B', '')")
+                .execute(&pool).await.unwrap();
+            sqlx::raw_sql("INSERT INTO products (name, sku, barcode) VALUES ('C', 'C', '123')").execute(&pool).await.unwrap();
+            assert!(sqlx::raw_sql("INSERT INTO products (name, sku, barcode) VALUES ('D', 'D', '123')").execute(&pool).await.is_err());
         });
     }
 }

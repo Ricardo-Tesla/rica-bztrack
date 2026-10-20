@@ -45,7 +45,8 @@ the repository private, host the release files somewhere public and change
 1. Update the version number in **both** files (same number, e.g. `1.0.1`):
    - `src-tauri/tauri.conf.json` → `"version"`
    - `package.json` → `"version"`
-2. Run the tests: `npm run test:run` and `cd src-tauri && cargo test --lib`.
+2. Run the tests: `npm run test:all` and `cd src-tauri && cargo test --lib`, then go
+   through the manual checklist in `docs/TESTING.md`.
 3. Commit, then tag and push:
    ```bash
    git commit -am "Release 1.0.1"

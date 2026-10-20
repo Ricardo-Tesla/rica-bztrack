@@ -118,7 +118,7 @@ Sales (incl. VAT)    = completed sales in the period
 | All-or-nothing saves, backups | Rust commands in `src-tauri/src/commands.rs` |
 | Updates | tauri-plugin-updater + GitHub Releases |
 | Excel export | Built-in .xlsx writer (`src/utils/excel.js`) |
-| Tests | Vitest + better-sqlite3 (real migrations), Rust unit tests |
+| Tests | Vitest + React Testing Library + better-sqlite3 (real migrations), Playwright end-to-end, Rust unit tests |
 
 ---
 
@@ -137,10 +137,14 @@ npm run tauri dev          # starts Vite and the app together
 ### Test
 
 ```bash
-npm run test:run           # 160+ JavaScript tests (services, migrations, receipts, translations)
+npm run test:run           # 300 tests: logic, services on a real database, every screen, random trading days
+npm run test:e2e           # 28 end-to-end journeys in a real browser (first time: npx playwright install chromium)
 npm run lint
-cd src-tauri && cargo test --lib   # Rust: transactions, backups, restore checks
+cd src-tauri && cargo test --lib   # Rust: transactions, backups, restore, migrations
 ```
+
+See **[docs/TESTING.md](docs/TESTING.md)** for what each test covers and the
+manual checklist (installer, printer, scanner, updates) to do before each release.
 
 The translation test fails if any text is missing in Kinyarwanda or French —
 add new texts to `src/i18n/rw.js` and `src/i18n/fr.js`.
@@ -165,7 +169,8 @@ src/
   context/      signed-in user, settings, language
   i18n/         en (keys) · rw · fr
   utils/        money/date formatting, receipts, Excel, permissions
-  tests/        unit + integration tests (use the real migrations)
+  tests/        unit, integration (real migrations) and screen tests
+e2e/            Playwright end-to-end tests + simulated desktop backend
 src-tauri/
   src/database.rs   database migrations (never edit an existing one — add a new version)
   src/commands.rs   transactions, backups, restore
