@@ -30,7 +30,7 @@ describe('Dates and time zones', () => {
   it('keeps plain dates (expense dates) on the same calendar day', () => {
     const d = parseDbDate('2026-03-01')
     expect([d.getFullYear(), d.getMonth(), d.getDate()]).toEqual([2026, 2, 1])
-    expect(formatDate('2026-03-01')).toBe('Mar 1, 2026')
+    expect(formatDate('2026-03-01')).toBe('1 Mar 2026')
   })
 
   it('leaves ISO strings that already have a time zone alone', () => {
@@ -68,7 +68,7 @@ describe('Archive instead of delete', () => {
 
   it('archives a sold product, keeps its sales, and frees its SKU', async () => {
     const id = addProduct('Rice')
-    await completeSale([{ id, name: 'Rice', sell_price: 10, quantity: 1 }], null, 'Cash', run)
+    await completeSale([{ id, name: 'Rice', sell_price: 10, quantity: 1 }], { customer: null, paymentMethod: 'Cash' }, run)
 
     const results = await run(buildDeleteProductStatements(id))
 
@@ -84,7 +84,7 @@ describe('Archive instead of delete', () => {
     const withSales = Number(db.prepare(`INSERT INTO customers (name) VALUES ('Ann')`).run().lastInsertRowid)
     const without = Number(db.prepare(`INSERT INTO customers (name) VALUES ('Bob')`).run().lastInsertRowid)
     const pid = addProduct('Rice')
-    await completeSale([{ id: pid, name: 'Rice', sell_price: 10, quantity: 1 }], { id: withSales, name: 'Ann' }, 'Cash', run)
+    await completeSale([{ id: pid, name: 'Rice', sell_price: 10, quantity: 1 }], { customer: { id: withSales, name: 'Ann' }, paymentMethod: 'Cash' }, run)
 
     expect((await run(buildDeleteCustomerStatements(withSales)))[0].rowsAffected).toBe(1)
     expect((await run(buildDeleteCustomerStatements(without)))[0].rowsAffected).toBe(0)
@@ -125,7 +125,7 @@ describe('Editing a product', () => {
   })
 
   it('refuses to overwrite stock that changed since the form was opened', async () => {
-    await completeSale([{ id, name: 'Rice', sell_price: 10, quantity: 3 }], null, 'Cash', run) // stock 10 → 7
+    await completeSale([{ id, name: 'Rice', sell_price: 10, quantity: 3 }], { customer: null, paymentMethod: 'Cash' }, run) // stock 10 → 7
     await expect(run(buildUpdateProductStatements(id, form({ stock: 10 }), 10))).rejects.toMatch('stock changed')
     expect(db.prepare('SELECT stock FROM products').get().stock).toBe(7)
   })
@@ -143,7 +143,7 @@ describe('P&L includes manual transactions (one source of truth)', () => {
 
     // Linked entries (already counted elsewhere in P&L)
     await run(buildRestockStatements({ product_id: pid, product_name: 'Rice', quantity: 5, unit_cost: 100, date: '2026-10-19' }).statements)
-    await completeSale([{ id: pid, name: 'Rice', sell_price: 300, quantity: 1 }], null, 'Cash', run)
+    await completeSale([{ id: pid, name: 'Rice', sell_price: 300, quantity: 1 }], { customer: null, paymentMethod: 'Cash' }, run)
     await run(buildAddExpenseStatements({ description: 'Rent', category: 'Rent', amount: 1000, date: '2026-10-01' }))
 
     // Manual entries typed on the Transactions page

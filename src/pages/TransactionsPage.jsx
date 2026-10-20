@@ -1,336 +1,224 @@
 import { useEffect, useState } from 'react'
 import { getTransactions, addTransaction, getTransactionSummary } from '../services/transactionService'
-import { formatMoney, todayLocal, formatDate } from '../utils/format'
+import { formatMoney, formatDate, todayLocal } from '../utils/format'
 import { PAYMENT_METHODS, TRANSACTION_CATEGORIES } from '../utils/constants'
-
+import { useApp } from '../context/AppContext'
+import { errorText } from '../utils/errors'
+import { initialRange } from '../utils/dateRanges'
+import { saveXlsx } from '../utils/excel'
+import DateRangePicker from '../components/DateRangePicker'
+import { Alert, Button, Field, Modal, PageHeader, StatCard, inputClass } from '../components/ui'
 
 const emptyForm = () => ({
-  description: '', type: 'income', category: 'Sales',
-  amount: '', payment_method: 'Cash',
-  date: todayLocal()
+  description: '', type: 'income', category: 'Other', amount: '', payment_method: 'Cash', date: todayLocal(),
 })
 
 export default function TransactionsPage() {
+  const { t } = useApp()
+  const [range, setRange] = useState(() => initialRange('this_month'))
   const [transactions, setTransactions] = useState([])
   const [summary, setSummary] = useState({ total_income: 0, total_expenses: 0, net: 0 })
   const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState(emptyForm)
+  const [notice, setNotice] = useState('')
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
+  const [method, setMethod] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [form, setForm] = useState(emptyForm)
+  const [saving, setSaving] = useState(false)
 
-  useEffect(() => { loadData() }, [])
-
-  async function loadData() {
+  async function load() {
     try {
       setLoading(true)
       const [txns, sum] = await Promise.all([
-        getTransactions(),
-        getTransactionSummary()
+        getTransactions({ from: range.from, to: range.to }),
+        getTransactionSummary({ from: range.from, to: range.to }),
       ])
       setTransactions(txns)
-      setSummary(sum)
-    } catch {
-      setError('Failed to load transactions')
+      setSummary(sum || {})
+    } catch (err) {
+      setError(t('Failed to load transactions') + ': ' + errorText(t, err))
     } finally {
       setLoading(false)
     }
   }
+  useEffect(() => { load() }, [range.from, range.to]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSave() {
-    if (!form.description.trim()) { setError('Description is required'); return }
-    if (!form.amount || parseFloat(form.amount) <= 0) { setError('Valid amount is required'); return }
-    if (!form.date) { setError('Date is required'); return }
+    if (!form.description.trim()) return setError(t('Description is required'))
+    if (!(parseFloat(form.amount) > 0)) return setError(t('Valid amount is required'))
+    if (!form.date) return setError(t('Date is required'))
     try {
       setSaving(true)
-      setError('')
       await addTransaction(form)
-      setForm(emptyForm())
-      setShowModal(false)
-      await loadData()
-    } catch {
-      setError('Failed to save transaction')
+      setAdding(false)
+      await load()
+    } catch (err) {
+      setError(t('Failed to save transaction') + ': ' + errorText(t, err))
     } finally {
       setSaving(false)
     }
   }
 
+  async function exportExcel() {
+    try {
+      const path = await saveXlsx(`transactions_${range.from || 'all'}_${range.to || todayLocal()}.xlsx`, [{
+        name: t('Transactions'),
+        columns: [
+          { header: t('Date'), key: 'date' },
+          { header: t('Description'), key: 'description', width: 40 },
+          { header: t('Category'), value: x => t(x.category) },
+          { header: t('Payment Method'), value: x => t(x.payment_method || '') },
+          { header: t('Money in'), value: x => (x.type === 'income' ? x.amount : null), type: 'money' },
+          { header: t('Money out'), value: x => (x.type === 'expense' ? x.amount : null), type: 'money' },
+          { header: t('Recorded by'), key: 'user_name' },
+        ],
+        rows: filtered,
+      }])
+      if (path) setNotice(t('Saved to {path}', { path }))
+    } catch (err) {
+      setError(errorText(t, err))
+    }
+  }
+
+  const term = search.toLowerCase()
   const filtered = transactions
-    .filter(t => filter === 'all' || t.type === filter)
-    .filter(t =>
-      t.description.toLowerCase().includes(search.toLowerCase()) ||
-      t.category.toLowerCase().includes(search.toLowerCase())
-    )
+    .filter(x => filter === 'all' || x.type === filter)
+    .filter(x => !method || x.payment_method === method)
+    .filter(x => x.description.toLowerCase().includes(term) || x.category.toLowerCase().includes(term))
+
+  // Money in / out per payment method (e.g. how much should be in the cash box)
+  const byMethod = PAYMENT_METHODS.map(m => {
+    const rows = transactions.filter(x => x.payment_method === m)
+    const inn = rows.filter(x => x.type === 'income').reduce((a, x) => a + x.amount, 0)
+    const out = rows.filter(x => x.type === 'expense').reduce((a, x) => a + x.amount, 0)
+    return { method: m, net: inn - out, count: rows.length }
+  }).filter(m => m.count > 0)
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 p-8">
+      <PageHeader title={t('Transactions')} subtitle={t('Cash ledger — all money in and out, including stock purchases. For profit, see Profit & Loss.')}>
+        <DateRangePicker value={range} onChange={setRange} />
+        <Button variant="secondary" onClick={exportExcel} disabled={!filtered.length}>⬇ {t('Excel')}</Button>
+        <Button onClick={() => { setForm(emptyForm()); setError(''); setAdding(true) }}>+ {t('Add Transaction')}</Button>
+      </PageHeader>
 
-      {/* Header */}
-      <div className="flex flex-col items-center mb-8">
-        <h1 className="text-3xl font-bold text-yellow-400">Transactions</h1>
-        <p className="text-gray-400 mt-1 text-sm">Cash ledger — all money in and out, including stock purchases. For profit, see Profit & Loss.</p>
+      <div className="grid grid-cols-3 gap-4 mb-4">
+        <StatCard label={t('Money In')} value={'+' + formatMoney(summary.total_income)} tone="green" />
+        <StatCard label={t('Money Out')} value={'-' + formatMoney(summary.total_expenses)} tone="red" />
+        <StatCard label={t('Net Cash')} value={formatMoney(summary.net)} tone={(summary.net || 0) >= 0 ? 'green' : 'red'} />
       </div>
-
-      {/* Stats Row */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
-        <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
-          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Money In</div>
-          <div className="text-2xl font-bold text-green-400">
-            +{formatMoney(parseFloat(summary.total_income || 0))}
-          </div>
-        </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
-          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Money Out</div>
-          <div className="text-2xl font-bold text-red-400">
-            -{formatMoney(parseFloat(summary.total_expenses || 0))}
-          </div>
-        </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
-          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Net Cash</div>
-          <div className={`text-2xl font-bold ${parseFloat(summary.net || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {formatMoney(parseFloat(summary.net || 0))}
-          </div>
-        </div>
-      </div>
-
-      {/* Toolbar */}
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <input
-            type="text"
-            placeholder="Search transactions..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="bg-gray-900 border border-gray-700 focus:border-yellow-400 rounded-lg px-4 py-2.5 text-sm outline-none text-white w-64 transition"
-          />
-          {/* Filter Tabs */}
-          <div className="flex bg-gray-900 border border-gray-800 rounded-lg p-1">
-            {['all', 'income', 'expense'].map(f => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`px-4 py-1.5 rounded-md text-xs font-semibold capitalize transition
-                  ${filter === f
-                    ? 'bg-yellow-400 text-black'
-                    : 'text-gray-400 hover:text-white'
-                  }`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-        </div>
-        <button
-          onClick={() => { setForm(emptyForm()); setShowModal(true); setError('') }}
-          className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-black font-bold px-5 py-2.5 rounded-lg transition text-sm"
-        >
-          <span className="text-lg leading-none">+</span> Add Transaction
-        </button>
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div className="bg-red-950 border border-red-700 text-red-300 px-4 py-3 rounded-lg mb-5 text-sm">
-          {error}
+      {byMethod.length > 0 && (
+        <div className="flex gap-2 flex-wrap mb-6">
+          {byMethod.map(m => (
+            <div key={m.method} className="bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-xs">
+              <span className="text-gray-400">{t(m.method)}</span>{' '}
+              <span className={`font-semibold ml-1 ${m.net >= 0 ? 'text-green-400' : 'text-red-400'}`}>{formatMoney(m.net)}</span>
+            </div>
+          ))}
         </div>
       )}
 
-      {/* Table */}
+      <Alert type="success" onClose={() => setNotice('')}>{notice}</Alert>
+      {!adding && <Alert onClose={() => setError('')}>{error}</Alert>}
+
+      <div className="flex gap-3 mb-4">
+        <input
+          type="text"
+          placeholder={t('Search transactions...')}
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="flex-1 bg-gray-900 border border-gray-700 focus:border-yellow-400 rounded-lg px-4 py-2.5 text-sm outline-none text-white transition"
+        />
+        <select value={filter} onChange={e => setFilter(e.target.value)} className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white">
+          <option value="all">{t('All')}</option>
+          <option value="income">{t('Money In')}</option>
+          <option value="expense">{t('Money Out')}</option>
+        </select>
+        <select value={method} onChange={e => setMethod(e.target.value)} className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white">
+          <option value="">{t('All payment methods')}</option>
+          {PAYMENT_METHODS.map(m => <option key={m} value={m}>{t(m)}</option>)}
+        </select>
+      </div>
+
       <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-gray-800">
-              <th className="text-left px-5 py-4 text-gray-400 font-medium text-xs uppercase tracking-wide">Description</th>
-              <th className="text-left px-5 py-4 text-gray-400 font-medium text-xs uppercase tracking-wide">Type</th>
-              <th className="text-left px-5 py-4 text-gray-400 font-medium text-xs uppercase tracking-wide">Category</th>
-              <th className="text-left px-5 py-4 text-gray-400 font-medium text-xs uppercase tracking-wide">Payment</th>
-              <th className="text-left px-5 py-4 text-gray-400 font-medium text-xs uppercase tracking-wide">Amount</th>
-              <th className="text-left px-5 py-4 text-gray-400 font-medium text-xs uppercase tracking-wide">Date</th>
+            <tr className="border-b border-gray-800 text-left text-gray-400 text-xs uppercase tracking-wide">
+              <th className="px-5 py-3">{t('Description')}</th>
+              <th className="px-5 py-3">{t('Category')}</th>
+              <th className="px-5 py-3">{t('Payment Method')}</th>
+              <th className="px-5 py-3">{t('Amount')}</th>
+              <th className="px-5 py-3">{t('Date')}</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr>
-                <td colSpan="6" className="text-center py-16 text-gray-500">
-                  <div className="animate-pulse">Loading transactions...</div>
-                </td>
-              </tr>
+              <tr><td colSpan={5} className="text-center py-12 text-gray-500 animate-pulse">{t('Loading...')}</td></tr>
             ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan="6" className="text-center py-16 text-gray-500">
-                  <div className="text-5xl mb-4">🔄</div>
-                  <div className="text-base font-medium text-gray-400">
-                    {search ? 'No transactions match your search' : 'No transactions yet'}
-                  </div>
-                  <div className="text-sm mt-1">
-                    {search ? 'Try a different search term' : 'Transactions are created automatically from sales and expenses'}
-                  </div>
+              <tr><td colSpan={5} className="text-center py-12 text-gray-500">{t('No transactions in this period')}</td></tr>
+            ) : filtered.map((x, i) => (
+              <tr key={x.id} className={`border-b border-gray-800 hover:bg-gray-800 transition ${i % 2 === 0 ? 'bg-gray-900' : 'bg-gray-950'}`}>
+                <td className="px-5 py-3">
+                  <div className="text-white">{x.description}</div>
+                  {x.user_name && <div className="text-xs text-gray-500">{x.user_name}</div>}
                 </td>
+                <td className="px-5 py-3"><span className="text-xs bg-gray-800 text-gray-300 border border-gray-700 px-2.5 py-1 rounded-full">{t(x.category)}</span></td>
+                <td className="px-5 py-3 text-gray-400 text-xs">{t(x.payment_method || '—')}</td>
+                <td className={`px-5 py-3 font-semibold ${x.type === 'income' ? 'text-green-400' : 'text-red-400'}`}>
+                  {x.type === 'income' ? '+' : '-'}{formatMoney(x.amount)}
+                </td>
+                <td className="px-5 py-3 text-gray-400 text-xs">{formatDate(x.date)}</td>
               </tr>
-            ) : (
-              filtered.map((t, i) => (
-                <tr
-                  key={t.id}
-                  className={`border-b border-gray-800 hover:bg-gray-800 transition ${i % 2 === 0 ? 'bg-gray-900' : 'bg-gray-950'}`}
-                >
-                  <td className="px-5 py-4 text-white font-medium">{t.description}</td>
-                  <td className="px-5 py-4">
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-semibold border
-                      ${t.type === 'income'
-                        ? 'bg-green-950 text-green-400 border-green-800'
-                        : 'bg-red-950 text-red-400 border-red-800'
-                      }`}>
-                      {t.type}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4">
-                    <span className="text-xs bg-gray-800 text-gray-300 border border-gray-700 px-2.5 py-1 rounded-full">
-                      {t.category}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4 text-gray-400 text-xs">{t.payment_method}</td>
-                  <td className={`px-5 py-4 font-bold ${t.type === 'income' ? 'text-green-400' : 'text-red-400'}`}>
-                    {t.type === 'income' ? '+' : '-'}{formatMoney(parseFloat(t.amount))}
-                  </td>
-                  <td className="px-5 py-4 text-gray-400 text-xs">{formatDate(t.date)}</td>
-                </tr>
-              ))
-            )}
+            ))}
           </tbody>
         </table>
-
-        {/* Footer */}
-        {filtered.length > 0 && (
-          <div className="px-5 py-3 border-t border-gray-800 bg-gray-900">
-            <span className="text-xs text-gray-500">
-              {filtered.length} transaction{filtered.length !== 1 ? 's' : ''} found
-            </span>
-          </div>
-        )}
       </div>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-7 w-full max-w-md shadow-2xl">
-
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-yellow-400">Add Transaction</h2>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-gray-500 hover:text-gray-300 text-xl leading-none transition"
-              >
-                ✕
-              </button>
+      {adding && (
+        <Modal title={t('Add Transaction')} onClose={() => setAdding(false)}>
+          <Alert onClose={() => setError('')}>{error}</Alert>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2 flex bg-gray-800 border border-gray-700 rounded-lg p-1">
+              {['income', 'expense'].map(type => (
+                <button key={type} onClick={() => setForm({ ...form, type })}
+                  className={`flex-1 py-2 rounded-md text-xs font-semibold transition ${form.type === type ? (type === 'income' ? 'bg-green-600 text-white' : 'bg-red-600 text-white') : 'text-gray-400 hover:text-white'}`}>
+                  {type === 'income' ? `💰 ${t('Money In')}` : `💸 ${t('Money Out')}`}
+                </button>
+              ))}
             </div>
-
-            {error && (
-              <div className="bg-red-950 border border-red-700 text-red-300 px-4 py-2 rounded-lg mb-4 text-sm">
-                {error}
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Description *</label>
-                <input
-                  className="w-full bg-gray-800 border border-gray-700 focus:border-yellow-400 rounded-lg px-3 py-2.5 text-sm outline-none text-white transition"
-                  placeholder="e.g. Cash sale to John"
-                  value={form.description}
-                  onChange={e => setForm({ ...form, description: e.target.value })}
-                />
-              </div>
-
-              {/* Type Toggle */}
-              <div className="col-span-2">
-                <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Type</label>
-                <div className="flex bg-gray-800 border border-gray-700 rounded-lg p-1">
-                  {['income', 'expense'].map(t => (
-                    <button
-                      key={t}
-                      onClick={() => setForm({ ...form, type: t })}
-                      className={`flex-1 py-2 rounded-md text-xs font-semibold capitalize transition
-                        ${form.type === t
-                          ? t === 'income' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'
-                          : 'text-gray-400 hover:text-white'
-                        }`}
-                    >
-                      {t === 'income' ? '💰 Income' : '💸 Expense'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Category</label>
-                <select
-                  className="w-full bg-gray-800 border border-gray-700 focus:border-yellow-400 rounded-lg px-3 py-2.5 text-sm outline-none text-white transition"
-                  value={form.category}
-                  onChange={e => setForm({ ...form, category: e.target.value })}
-                >
-                  {TRANSACTION_CATEGORIES.map(c => <option key={c}>{c}</option>)}
-                </select>
-                <p className="text-xs text-gray-500 mt-1.5">
-                  {form.category === 'Stock Purchase'
-                    ? 'Recorded as money out only. Tip: use Products → Restock so the stock goes up too.'
-                    : 'Counts in Profit & Loss as Other Income / Other Expenses.'}
-                </p>
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Amount *</label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  className="w-full bg-gray-800 border border-gray-700 focus:border-yellow-400 rounded-lg px-3 py-2.5 text-sm outline-none text-white transition"
-                  placeholder="0.00"
-                  value={form.amount}
-                  onChange={e => setForm({ ...form, amount: e.target.value })}
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Payment Method</label>
-                <select
-                  className="w-full bg-gray-800 border border-gray-700 focus:border-yellow-400 rounded-lg px-3 py-2.5 text-sm outline-none text-white transition"
-                  value={form.payment_method}
-                  onChange={e => setForm({ ...form, payment_method: e.target.value })}
-                >
-                  {PAYMENT_METHODS.map(m => <option key={m}>{m}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-400 mb-1.5 block uppercase tracking-wide">Date *</label>
-                <input
-                  type="date"
-                  className="w-full bg-gray-800 border border-gray-700 focus:border-yellow-400 rounded-lg px-3 py-2.5 text-sm outline-none text-white transition"
-                  value={form.date}
-                  onChange={e => setForm({ ...form, date: e.target.value })}
-                />
-              </div>
-            </div>
-
-            <div className="flex gap-3 justify-end mt-6">
-              <button
-                onClick={() => { setShowModal(false); setError('') }}
-                className="border border-gray-700 hover:border-gray-500 text-gray-300 hover:text-white px-5 py-2 rounded-lg text-sm transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="bg-yellow-400 hover:bg-yellow-300 disabled:opacity-50 text-black font-bold px-6 py-2 rounded-lg text-sm transition"
-              >
-                {saving ? 'Saving...' : 'Save Transaction'}
-              </button>
-            </div>
+            <Field label={t('Description') + ' *'} className="col-span-2">
+              <input className={inputClass} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} autoFocus />
+            </Field>
+            <Field
+              label={t('Category')}
+              className="col-span-2"
+              hint={form.category === 'Stock Purchase'
+                ? t('Recorded as money out only. Tip: use Products → Restock so the stock goes up too.')
+                : t('Counts in Profit & Loss as Other Income / Other Expenses.')}
+            >
+              <select className={inputClass} value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
+                {TRANSACTION_CATEGORIES.map(c => <option key={c} value={c}>{t(c)}</option>)}
+              </select>
+            </Field>
+            <Field label={t('Amount') + ' *'}>
+              <input type="number" min="0" className={inputClass} value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
+            </Field>
+            <Field label={t('Date') + ' *'}>
+              <input type="date" className={inputClass} value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+            </Field>
+            <Field label={t('Payment Method')} className="col-span-2">
+              <select className={inputClass} value={form.payment_method} onChange={e => setForm({ ...form, payment_method: e.target.value })}>
+                {PAYMENT_METHODS.map(m => <option key={m} value={m}>{t(m)}</option>)}
+              </select>
+            </Field>
           </div>
-        </div>
+          <div className="flex justify-end gap-3 mt-6">
+            <Button variant="secondary" onClick={() => setAdding(false)}>{t('Cancel')}</Button>
+            <Button onClick={handleSave} disabled={saving}>{saving ? t('Saving...') : t('Save')}</Button>
+          </div>
+        </Modal>
       )}
     </div>
   )

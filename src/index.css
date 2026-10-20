@@ -1,3 +1,29 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+/* ── Receipt printing ─────────────────────────────────────
+   The receipt is put in #print-root and only that is printed. */
+#print-root { display: none; }
+
+@media print {
+  body * { visibility: hidden; }
+  #print-root, #print-root * { visibility: visible; }
+  #print-root {
+    display: block;
+    position: absolute;
+    left: 0;
+    top: 0;
+    padding: 2mm 4mm;
+    background: #fff;
+    color: #000;
+    font-family: 'Courier New', Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  #print-root .c { text-align: center; }
+  #print-root .b { font-weight: bold; }
+  #print-root .big { font-size: 13px; }
+  #print-root .r { display: flex; justify-content: space-between; gap: 6px; }
+  #print-root .r span:last-child { text-align: right; white-space: nowrap; }
+  #print-root .hr { border-top: 1px dashed #000; margin: 4px 0; }
+}

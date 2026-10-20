@@ -1,4 +1,7 @@
 // Shared formatting helpers for money and dates.
+import { getCurrentLanguage, DATE_LOCALES } from '../i18n'
+
+const dateLocale = () => DATE_LOCALES[getCurrentLanguage()] || 'en-GB'
 
 // ── MONEY ─────────────────────────────────────────────────
 // Change these two values to switch the whole app to another currency.
@@ -33,19 +36,19 @@ export function parseDbDate(value) {
   return new Date(s) // already has a time zone (e.g. toISOString())
 }
 
-// "Oct 19, 2026"
+// "19 Oct 2026" (in the app's language)
 export function formatDate(value, fallback = '—') {
   const d = parseDbDate(value)
   if (!d || isNaN(d)) return fallback
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+  return d.toLocaleDateString(dateLocale(), { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-// "Oct 19, 2026, 02:30 PM"
+// "19 Oct 2026, 14:30" (in the app's language, 24-hour clock)
 export function formatDateTime(value, fallback = '—') {
   const d = parseDbDate(value)
   if (!d || isNaN(d)) return fallback
-  return d.toLocaleDateString('en-US', {
-    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  return d.toLocaleString(dateLocale(), {
+    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
   })
 }
 
@@ -65,4 +68,26 @@ export function monthLocal(date = new Date()) {
 // First month of the last `count` months (including this one) as "YYYY-MM"
 export function monthsAgoLocal(count, date = new Date()) {
   return monthLocal(new Date(date.getFullYear(), date.getMonth() - (count - 1), 1))
+}
+
+// Round a money amount to the currency's decimals (RWF: whole francs)
+export function roundMoney(amount) {
+  const f = 10 ** CURRENCY_DECIMALS
+  return Math.round((Number(amount) || 0) * f) / f
+}
+
+// ── QUANTITIES ────────────────────────────────────────────
+// 1.5 → "1.5", 2 → "2", 0.3333 → "0.333"
+export function formatQty(q) {
+  const n = Math.round((Number(q) || 0) * 1000) / 1000
+  return n.toLocaleString('en-US', { maximumFractionDigits: 3 })
+}
+
+// Shown name of a customer ("Walk-in Customer" is stored in English)
+export function customerLabel(name, tr) {
+  return !name || name === 'Walk-in Customer' ? tr('Walk-in Customer') : name
+}
+
+export function roundQty(q) {
+  return Math.round((Number(q) || 0) * 1000) / 1000
 }

@@ -1,259 +1,123 @@
 import { useEffect, useState } from 'react'
 import { getDashboardData } from '../services/dashboardService'
-import { formatMoney, formatDateTime } from '../utils/format'
+import { qtyLabel } from '../services/salesService'
+import { formatMoney, formatDateTime, formatDate, customerLabel } from '../utils/format'
+import { useApp } from '../context/AppContext'
+import { errorText } from '../utils/errors'
+import { DATE_LOCALES, tn } from '../i18n'
+import { Alert, StatCard } from '../components/ui'
 
-export default function DashboardPage() {
+export default function DashboardPage({ onNavigate }) {
+  const { t, user, settings, lang } = useApp()
   const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => { loadDashboard() }, [])
+  useEffect(() => {
+    getDashboardData()
+      .then(setData)
+      .catch(err => setError(t('Failed to load dashboard') + ': ' + errorText(t, err)))
+  }, [t])
 
-  async function loadDashboard() {
-    try {
-      setLoading(true)
-      const result = await getDashboardData()
-      setData(result)
-    } catch {
-      setError('Failed to load dashboard')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? t('Good morning') : hour < 17 ? t('Good afternoon') : t('Good evening')
 
-  function getGreeting() {
-    const hour = new Date().getHours()
-    if (hour < 12) return 'Good morning'
-    if (hour < 17) return 'Good afternoon'
-    return 'Good evening'
-  }
-
-  if (loading) {
+  if (!data) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-gray-500 animate-pulse text-sm">Loading dashboard...</div>
+      <div className="min-h-screen bg-gray-950 p-8">
+        <Alert onClose={() => setError('')}>{error}</Alert>
+        {!error && <div className="text-gray-500 animate-pulse text-sm text-center pt-20">{t('Loading dashboard...')}</div>}
       </div>
     )
   }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-red-400 text-sm">{error}</div>
-      </div>
-    )
-  }
-
-  // Revenue − cost of the goods sold − expenses (restocks are not expenses)
-  const monthProfit = data.thisMonth.revenue - data.thisMonth.cogs - data.thisMonth.expenses
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100 p-8">
-
-      {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white">
-          {getGreeting()} 👋
-        </h1>
+        <h1 className="text-3xl font-bold text-white">{greeting}, <span className="text-yellow-400">{user?.name}</span></h1>
         <p className="text-gray-400 mt-1 text-sm">
-          Here's what's happening in your business today —&nbsp;
-          {new Date().toLocaleDateString('en-US', {
-            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-          })}
+          {settings.business_name ? `${settings.business_name} · ` : ''}
+          {new Date().toLocaleDateString(DATE_LOCALES[lang] || 'en-GB', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
         </p>
       </div>
 
-      {/* Today's Stats */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
-          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Today's Revenue</div>
-          <div className="text-2xl font-bold text-yellow-400">
-            {formatMoney(data.today.revenue)}
-          </div>
-          <div className="text-xs text-gray-500 mt-1">
-            {data.today.salesCount} sale{data.today.salesCount !== 1 ? 's' : ''} today
-          </div>
-        </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
-          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Month Profit</div>
-          <div className={`text-2xl font-bold ${monthProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {formatMoney(monthProfit)}
-          </div>
-          <div className="text-xs text-gray-500 mt-1">After cost of goods & expenses</div>
-        </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
-          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Net Profit</div>
-          <div className={`text-2xl font-bold ${data.allTime.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-            {formatMoney(data.allTime.netProfit)}
-          </div>
-          <div className="text-xs text-gray-500 mt-1">All time</div>
-        </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
-          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Revenue</div>
-          <div className="text-2xl font-bold text-yellow-400">
-            {formatMoney(data.allTime.revenue)}
-          </div>
-          <div className="text-xs text-gray-500 mt-1">All time sales</div>
-        </div>
+      <div className="grid grid-cols-4 gap-4 mb-4">
+        <StatCard label={t('Today\'s sales')} value={formatMoney(data.today.revenue)} hint={tn(t, data.today.salesCount, '{n} sale today', '{n} sales today')} />
+        <StatCard label={t('Profit this month')} value={formatMoney(data.thisMonth.netProfit)} tone={data.thisMonth.netProfit >= 0 ? 'green' : 'red'} hint={t('After cost of goods & expenses')} />
+        <StatCard label={t('Sales this month')} value={formatMoney(data.thisMonth.revenue)} hint={data.thisMonth.vat > 0 ? t('incl. VAT {amount}', { amount: formatMoney(data.thisMonth.vat) }) : null} />
+        <StatCard label={t('Customers owe you')} value={formatMoney(data.owed.owed)} tone={data.owed.owed > 0 ? 'red' : 'white'} hint={tn(t, data.owed.customers, '{n} customer', '{n} customers')} />
       </div>
-
-      {/* Second Stats Row */}
       <div className="grid grid-cols-4 gap-4 mb-8">
-        <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
-          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Customers</div>
-          <div className="text-2xl font-bold text-yellow-400">{data.counts.customers}</div>
-          <div className="text-xs text-gray-500 mt-1">Registered</div>
-        </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
-          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Products</div>
-          <div className="text-2xl font-bold text-yellow-400">{data.counts.products}</div>
-          <div className="text-xs text-gray-500 mt-1">In catalog</div>
-        </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
-          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Total Expenses</div>
-          <div className="text-2xl font-bold text-red-400">
-            {formatMoney(data.allTime.expenses)}
-          </div>
-          <div className="text-xs text-gray-500 mt-1">All time</div>
-        </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-xl px-5 py-4">
-          <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">Out of Stock</div>
-          <div className={`text-2xl font-bold ${data.counts.outOfStock > 0 ? 'text-red-400' : 'text-green-400'}`}>
-            {data.counts.outOfStock}
-          </div>
-          <div className="text-xs text-gray-500 mt-1">Products</div>
-        </div>
+        <StatCard label={t('All-time sales')} value={formatMoney(data.allTime.revenue)} tone="white" />
+        <StatCard label={t('All-time net profit')} value={formatMoney(data.allTime.netProfit)} tone={data.allTime.netProfit >= 0 ? 'green' : 'red'} />
+        <StatCard label={t('Products')} value={data.counts.products} tone="white" hint={data.counts.outOfStock ? t('{n} out of stock', { n: data.counts.outOfStock }) : null} />
+        <StatCard label={t('Customers')} value={data.counts.customers} tone="white" />
       </div>
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-2 gap-6 mb-6">
-
-        {/* Recent Sales */}
+      <div className="grid grid-cols-3 gap-6">
         <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-800 flex items-center justify-between">
-            <div>
-              <div className="text-sm font-bold text-white">Recent Sales</div>
-              <div className="text-xs text-gray-500 mt-0.5">Latest completed sales</div>
-            </div>
+          <div className="px-5 py-4 border-b border-gray-800 flex justify-between items-center">
+            <div className="text-sm font-bold text-white">⚠️ {t('Low stock')}</div>
+            <button onClick={() => onNavigate?.('products')} className="text-xs text-yellow-400 hover:text-yellow-300">{t('Products')} →</button>
           </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-800">
-                <th className="text-left px-5 py-3 text-gray-400 font-medium text-xs uppercase tracking-wide">Receipt</th>
-                <th className="text-left px-5 py-3 text-gray-400 font-medium text-xs uppercase tracking-wide">Customer</th>
-                <th className="text-left px-5 py-3 text-gray-400 font-medium text-xs uppercase tracking-wide">Total</th>
-                <th className="text-left px-5 py-3 text-gray-400 font-medium text-xs uppercase tracking-wide">Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.recentSales.length === 0 ? (
-                <tr>
-                  <td colSpan="4" className="text-center py-8 text-gray-500 text-xs">
-                    No sales yet
-                  </td>
-                </tr>
-              ) : (
-                data.recentSales.map((s, i) => (
-                  <tr key={i} className="border-b border-gray-800 hover:bg-gray-800 transition">
-                    <td className="px-5 py-3">
-                      <span className="font-mono text-xs text-yellow-400">{s.receipt_number}</span>
-                    </td>
-                    <td className="px-5 py-3 text-gray-300 text-xs">{s.customer_name}</td>
-                    <td className="px-5 py-3 text-green-400 font-semibold text-xs">
-                      {formatMoney(parseFloat(s.total))}
-                    </td>
-                    <td className="px-5 py-3 text-gray-500 text-xs">{formatDateTime(s.created_at)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Recent Transactions */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-800">
-            <div className="text-sm font-bold text-white">Recent Transactions</div>
-            <div className="text-xs text-gray-500 mt-0.5">Latest financial movements</div>
-          </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-800">
-                <th className="text-left px-5 py-3 text-gray-400 font-medium text-xs uppercase tracking-wide">Description</th>
-                <th className="text-left px-5 py-3 text-gray-400 font-medium text-xs uppercase tracking-wide">Category</th>
-                <th className="text-left px-5 py-3 text-gray-400 font-medium text-xs uppercase tracking-wide">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.recentTransactions.length === 0 ? (
-                <tr>
-                  <td colSpan="3" className="text-center py-8 text-gray-500 text-xs">
-                    No transactions yet
-                  </td>
-                </tr>
-              ) : (
-                data.recentTransactions.map((t, i) => (
-                  <tr key={i} className="border-b border-gray-800 hover:bg-gray-800 transition">
-                    <td className="px-5 py-3 text-gray-300 text-xs">{t.description}</td>
-                    <td className="px-5 py-3">
-                      <span className="text-xs bg-gray-800 text-gray-400 border border-gray-700 px-2 py-0.5 rounded-full">
-                        {t.category}
-                      </span>
-                    </td>
-                    <td className={`px-5 py-3 font-bold text-xs ${t.type === 'income' ? 'text-green-400' : 'text-red-400'}`}>
-                      {t.type === 'income' ? '+' : '-'}{formatMoney(parseFloat(t.amount))}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Low Stock Alerts */}
-      {data.lowStock.length > 0 && (
-        <div className="bg-gray-900 border border-yellow-800 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-yellow-800 flex items-center gap-2">
-            <span>⚠️</span>
-            <div>
-              <div className="text-sm font-bold text-yellow-400">Low Stock Alert</div>
-              <div className="text-xs text-gray-500 mt-0.5">
-                {data.lowStock.length} product{data.lowStock.length !== 1 ? 's' : ''} need restocking
+          <div className="p-5">
+            {data.lowStock.length === 0 ? (
+              <div className="text-center py-6 text-gray-500 text-sm">✅ {t('All products are well stocked')}</div>
+            ) : data.lowStock.map((p, i) => (
+              <div key={i} className="flex justify-between text-sm mb-2.5">
+                <span className="text-gray-300 truncate pr-2">{p.name}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${p.stock <= 0 ? 'bg-red-950 text-red-400 border border-red-800' : 'bg-yellow-950 text-yellow-400 border border-yellow-800'}`}>
+                  {p.stock <= 0 ? t('Out') : t('{qty} left', { qty: qtyLabel(p.stock, p.unit) })}
+                </span>
               </div>
-            </div>
+            ))}
           </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-800">
-                <th className="text-left px-5 py-3 text-gray-400 font-medium text-xs uppercase tracking-wide">Product</th>
-                <th className="text-left px-5 py-3 text-gray-400 font-medium text-xs uppercase tracking-wide">Current Stock</th>
-                <th className="text-left px-5 py-3 text-gray-400 font-medium text-xs uppercase tracking-wide">Alert Level</th>
-                <th className="text-left px-5 py-3 text-gray-400 font-medium text-xs uppercase tracking-wide">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.lowStock.map((p, i) => (
-                <tr key={i} className="border-b border-gray-800 hover:bg-gray-800 transition">
-                  <td className="px-5 py-3 font-semibold text-white">{p.name}</td>
-                  <td className="px-5 py-3 text-gray-300">{p.stock}</td>
-                  <td className="px-5 py-3 text-gray-400">{p.low_stock_alert}</td>
-                  <td className="px-5 py-3">
-                    <span className={`text-xs px-2.5 py-1 rounded-full font-semibold border
-                      ${p.stock <= 0
-                        ? 'bg-red-950 text-red-400 border-red-800'
-                        : 'bg-yellow-950 text-yellow-400 border-yellow-800'
-                      }`}>
-                      {p.stock <= 0 ? 'Out of Stock' : 'Low Stock'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
-      )}
 
+        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-800 flex justify-between items-center">
+            <div className="text-sm font-bold text-white">🧾 {t('Recent sales')}</div>
+            <button onClick={() => onNavigate?.('sales')} className="text-xs text-yellow-400 hover:text-yellow-300">{t('Sales History')} →</button>
+          </div>
+          <div className="p-5">
+            {data.recentSales.length === 0 ? (
+              <div className="text-center py-6 text-gray-500 text-sm">{t('No sales yet')}</div>
+            ) : data.recentSales.map(s => (
+              <div key={s.receipt_number} className="flex justify-between items-center text-sm mb-3">
+                <div className="min-w-0">
+                  <div className="text-gray-200 truncate">{customerLabel(s.customer_name, t)}</div>
+                  <div className="text-xs text-gray-500">{formatDateTime(s.created_at)}{s.user_name ? ` · ${s.user_name}` : ''}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-yellow-400 font-semibold">{formatMoney(s.total)}</div>
+                  <div className="text-xs text-gray-500">{t(s.payment_method)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-800 flex justify-between items-center">
+            <div className="text-sm font-bold text-white">🔄 {t('Recent money in / out')}</div>
+            <button onClick={() => onNavigate?.('transactions')} className="text-xs text-yellow-400 hover:text-yellow-300">{t('Transactions')} →</button>
+          </div>
+          <div className="p-5">
+            {data.recentTransactions.length === 0 ? (
+              <div className="text-center py-6 text-gray-500 text-sm">{t('No transactions yet')}</div>
+            ) : data.recentTransactions.map((tx, i) => (
+              <div key={i} className="flex justify-between items-center text-sm mb-3">
+                <div className="min-w-0 pr-2">
+                  <div className="text-gray-200 truncate">{tx.description}</div>
+                  <div className="text-xs text-gray-500">{t(tx.category)} · {formatDate(tx.date)}</div>
+                </div>
+                <div className={`font-semibold whitespace-nowrap ${tx.type === 'income' ? 'text-green-400' : 'text-red-400'}`}>
+                  {tx.type === 'income' ? '+' : '-'}{formatMoney(tx.amount)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

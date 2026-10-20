@@ -177,7 +177,7 @@ describe('formatDate', () => {
     })
 
     it('keeps a plain date on the same calendar day', () => {
-        expect(formatDate('2025-01-15')).toBe('Jan 15, 2025')
+        expect(formatDate('2025-01-15')).toBe('15 Jan 2025')
     })
 })
 

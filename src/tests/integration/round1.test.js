@@ -62,7 +62,7 @@ describe('Sales (real salesService)', () => {
     const id = addProduct(db, { name: 'Rice', stock: 10, buy: 6, sell: 10 })
     const cart = [{ id, name: 'Rice', sell_price: 10, buy_price: 6, quantity: 3, stock: 10 }]
 
-    const result = await completeSale(cart, null, 'Cash', run)
+    const result = await completeSale(cart, { customer: null, paymentMethod: 'Cash' }, run)
 
     expect(result.total).toBe(30)
     expect(result.receiptNumber).toMatch(/^RCT-\d{8}-[A-Z0-9]{6}$/)
@@ -76,7 +76,7 @@ describe('Sales (real salesService)', () => {
   it('uses the current buy price from the database for COGS', async () => {
     const id = addProduct(db, { name: 'Rice', stock: 10, buy: 7.5 })
     const cart = [{ id, name: 'Rice', sell_price: 10, buy_price: 6 /* stale */, quantity: 1 }]
-    await completeSale(cart, null, 'Cash', run)
+    await completeSale(cart, { customer: null, paymentMethod: 'Cash' }, run)
     expect(db.prepare('SELECT buy_price FROM sale_items').get().buy_price).toBe(7.5)
   })
 
@@ -88,7 +88,7 @@ describe('Sales (real salesService)', () => {
       { id: b, name: 'Oil', sell_price: 10, quantity: 5 }, // only 1 in stock
     ]
 
-    await expect(completeSale(cart, null, 'Cash', run)).rejects.toMatch('Not enough stock for "Oil"')
+    await expect(completeSale(cart, { customer: null, paymentMethod: 'Cash' }, run)).rejects.toMatch('Not enough stock for "Oil"')
 
     expect(product(db, a).stock).toBe(10)
     expect(product(db, b).stock).toBe(1)
@@ -107,7 +107,7 @@ describe('Sales (real salesService)', () => {
       return run(statements)
     }
 
-    const result = await completeSale(cart, null, 'Cash', flaky)
+    const result = await completeSale(cart, { customer: null, paymentMethod: 'Cash' }, flaky)
 
     expect(tried).toHaveLength(2)
     expect(tried[0]).not.toBe(tried[1])
@@ -116,13 +116,13 @@ describe('Sales (real salesService)', () => {
   })
 
   it('rejects an empty cart', async () => {
-    await expect(completeSale([], null, 'Cash', run)).rejects.toThrow('Cart is empty')
+    await expect(completeSale([], { customer: null, paymentMethod: 'Cash' }, run)).rejects.toThrow('Cart is empty')
   })
 
   it('links every sale line to its sale', () => {
     const { statements } = buildSaleStatements(
       [{ id: 1, name: 'A', sell_price: 1, quantity: 1 }, { id: 2, name: 'B', sell_price: 2, quantity: 2 }],
-      { id: 9, name: 'Ann' }, 'Card', 'RCT-X'
+      { customer: { id: 9, name: 'Ann' }, paymentMethod: 'Card', receiptNumber: 'RCT-X' }
     )
     const lines = statements.filter(s => s.sql.includes('INSERT INTO sale_items'))
     expect(lines.every(s => s.params[0].$ref === 0)).toBe(true)
@@ -178,7 +178,7 @@ describe('Restock (real restockService)', () => {
   it('profit counts stock cost once — when sold', async () => {
     const id = addProduct(db, { name: 'Rice', stock: 0, buy: 0 })
     await run(buildRestockStatements({ product_id: id, product_name: 'Rice', quantity: 10, unit_cost: 6, date: '2026-10-19' }).statements)
-    await completeSale([{ id, name: 'Rice', sell_price: 10, quantity: 4 }], null, 'Cash', run)
+    await completeSale([{ id, name: 'Rice', sell_price: 10, quantity: 4 }], { customer: null, paymentMethod: 'Cash' }, run)
 
     const revenue = db.prepare(`SELECT SUM(total) AS v FROM sales`).get().v
     const cogs = db.prepare(`SELECT SUM(buy_price * quantity) AS v FROM sale_items`).get().v

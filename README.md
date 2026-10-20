@@ -1,372 +1,192 @@
 # Rica BizTrack
 
-> A complete offline desktop business management app for small businesses —
-> built with Tauri, React, and SQLite.
+> Offline point-of-sale and business management for small shops in Rwanda —
+> built with Tauri, React and SQLite. English · Kinyarwanda · Français.
 
 ---
 
 ## What is Rica BizTrack?
 
-Rica BizTrack is a desktop business management app designed for small businesses
-that need a reliable, fast, and offline tool to run their daily operations.
+Rica BizTrack is a Windows desktop app that lets a small business sell, track
+stock, follow customer debts (ideni), record expenses and see its real profit —
+**without internet and without a monthly subscription**.
 
-Most business software is either too expensive, requires a monthly subscription,
-or depends on a stable internet connection. Rica BizTrack solves all three problems —
-it is free to install, works completely offline, and fits in a 6MB installer.
+All data stays on the shop's computer, is backed up automatically every day,
+and the app updates itself when it is online.
 
-From managing your product inventory and recording daily sales to tracking expenses
-and generating profit and loss reports, Rica BizTrack gives small business owners
-a complete financial picture of their business — without needing an accountant.
-
----
-
-## Who is it for?
-
-Rica BizTrack is built for small business owners who:
-
-- Run a shop, store, or retail business
-- Want to track what they sell and how much they earn
-- Need to manage suppliers, customers, and inventory
-- Want to know if their business is profitable
-- Work in areas with unreliable internet connectivity
+**Guides:**
+- 🧑‍💼 [Shop owner's guide](docs/SHOP-GUIDE.md) — installing, first setup, daily use
+- 🚀 [Releasing a new version](RELEASING.md) — for the developer
 
 ---
 
 ## Features
 
-### 📊 Dashboard
-- Live overview of today's revenue and sales count
-- Month-to-date profit after expenses
-- All-time revenue, net profit, and total expenses
-- Low stock and out of stock alerts
-- Recent sales and transaction feed
-
 ### 🛒 Point of Sale
-- Product search and grid view
-- Add to cart with quantity controls
-- Select customer or sell to walk-in
-- Choose payment method — Cash, Card, Mobile Money, Bank Transfer
-- Complete sale with one click
-- Auto-generated receipt with unique receipt number
-- Stock deducted automatically on every sale
-- Income transaction recorded automatically
+- Search, click, or **scan a barcode** (USB scanners work out of the box)
+- Sell **kg / litre / metre products in parts** (e.g. 1.5 kg of rice)
+- Payment by **Cash, Mobile Money, Card, Bank Transfer — or Credit (ideni)**
+- **Cash received → change** calculated for the cashier
+- MoMo / card **transaction reference** saved with the sale
+- **Discounts** in RWF or %
+- **VAT 18%** (optional) — prices include VAT, VAT shown on receipts and reports
+- Stock is checked when the sale is saved — **overselling is impossible**
+- **Real receipt printing** on 58 mm or 80 mm receipt printers, with the shop's
+  name, address, phone and TIN
+
+### 👥 Customers and debts (ideni)
+- Credit sales with an optional part paid now
+- What every customer owes, at a glance; **record repayments**; customer statement
+- Repayments recorded by mistake can be cancelled by the owner
 
 ### 💳 Sales History
-- Full list of all completed sales
-- Search by receipt number, customer, or payment method
-- View sale details including itemized breakdown
-- Print receipt as thermal-format .txt file
-- Void a sale — items go back into stock and the refund is recorded
+- Filter by period, search by receipt, customer, MoMo reference or cashier
+- Reprint receipts, record the official **EBM receipt number**
+- **Void a sale** with a reason — stock goes back, refund is logged, who voided it is recorded
 
-### 📦 Products
-- Add, edit, and delete products
-- SKU / product code management
-- Buy price, sell price, and profit margin display
-- Stock tracking with low stock alerts
-- **Weighted average cost** — buy price recalculates automatically on restock
-- Restock from supplier with full cost tracking
-- Stock movement history per product
+### 📦 Products, stock and suppliers
+- Barcodes, categories, units, VAT-exempt products
+- **Restock** with weighted-average cost; stock history shows every restock,
+  correction, return — and who did it
+- Low-stock alerts; stock value; Excel export
 
-### 🏭 Suppliers
-- Add and manage suppliers
-- Store contact, phone, email, and address
-- Link suppliers to products and restocks
+### 💸 Expenses and 🔄 Transactions
+- Expenses by category, edit and delete; cash ledger with totals per payment method
+  (how much should be in the cash box / on MoMo)
 
-### 👥 Customers
-- Add and manage customers
-- View total orders and total spent per customer
-- Last visit date tracking
+### 📈 Profit & Loss and 📊 Dashboard
+- **Any period**: today, this week, this month, last month, this year, custom
+- Sales → VAT → net sales → cost of goods sold → gross profit → expenses → net profit
+- Monthly chart, top products, **Excel export for the accountant**
 
-### 🔄 Transactions
-- Complete financial ledger — all money in and out
-- Auto-created from every sale and expense
-- Manual transaction entry
-- Filter by income or expense
-- Net balance calculation
+### 🔐 Users and security
+- **Owner and cashier accounts with a PIN**; cashiers can sell but cannot see
+  profits, change products, void sales or change settings
+- Auto-lock after inactivity; 5 wrong PINs lock the account for 30 seconds
+- Owner **recovery code** if the PIN is forgotten
 
-### 💸 Expenses
-- Record business expenses by category
-- Categories: Rent, Salary, Utilities, Marketing, Transport,
-  Maintenance, Other (stock purchases are recorded with Restock, not as expenses)
-- Monthly expense breakdown
-- Edit or delete expenses (the matching transaction is updated too)
-- Auto-creates transaction record on every expense
+### 💾 Never lose data
+- **Automatic daily backup** (keeps the last 30 days) — to any folder, e.g. a USB drive
+- One-click restore, with a safety copy of the current data first
+- Every sale, restock and payment is saved all-or-nothing
 
-### 📈 Profit & Loss
-- Full income statement — Revenue, COGS, Gross Profit, Net Profit
-- Expense breakdown by category with progress bars
-- Monthly revenue vs expenses bar chart
-- Top 5 selling products by revenue with margin rating
+### 🌍 Three languages, auto-updates
+- English, Kinyarwanda and French — switch any time in Settings
+- The app checks for new versions when online and installs them in one click
 
-### 🖨️ Receipt Printing
-- Thermal receipt format — works with standard POS printers
-- Grows automatically with number of items
-- Includes receipt number, customer, payment method, itemized list, and total
-- Save as .txt file from POS modal or Sales History
-
-### 💾 Data Backup
-- One click backup from the sidebar
-- Saves a complete, consistent copy of the database (safe while the app is running)
-- Choose where to save the backup file
-- One click restore from the sidebar — the backup is checked first and a safety
-  copy of your current data is saved before anything is replaced
+> **Tax note:** receipts from this app are **not EBM invoices**. VAT-registered
+> businesses must still issue official invoices through RRA's EBM system.
 
 ---
 
-## How is it different from other apps?
+## Business logic
 
-| Feature | Rica BizTrack | Cloud Apps | Excel |
-|---------|--------------|------------|-------|
-| Works offline | ✅ | ❌ | ✅ |
-| No subscription | ✅ | ❌ | ✅ |
-| Real-time stock tracking | ✅ | ✅ | ❌ |
-| Auto P&L reports | ✅ | ✅ | ❌ |
-| Receipt printing | ✅ | ✅ | ❌ |
-| Installer size | ~6MB | N/A | ~300MB |
-| Internet required | ❌ | ✅ | ❌ |
-| Free forever | ✅ | ❌ | ❌ |
+### Weighted average cost
+Restocking at a new price recalculates the average buy price of all units:
+`(old stock × old cost + new qty × new cost) ÷ total units`.
 
----
+### Stock purchases and profit
+Stock you buy is inventory, not an expense. A restock is logged in Transactions as
+money out; its cost is counted in Profit & Loss (as cost of goods sold) **when the
+items are sold** — never twice.
 
-## Business Logic
+### Credit sales
+Revenue counts on the day of the sale. Only money actually received goes into the
+cash ledger (the part paid at the till, then each repayment).
 
-### Weighted Average Cost
-Every time you restock a product at a different price, Rica BizTrack
-automatically recalculates the average buy price across all units:
-
+### Profit & Loss
 ```
-Example:
-  10 units bought at $6.00  =  $60.00
-  20 units bought at $7.00  =  $140.00
-  Total: 30 units           =  $200.00
-  New average buy price     =  $6.67
-```
-
-This keeps your profit margins and P&L reports accurate over time.
-
-### Auto Transaction Logging
-Every financial event creates a transaction automatically:
-- Complete a sale → income transaction created
-- Add an expense → expense transaction created
-- Restock a product → stock purchase transaction (money out) created
-
-Each of these is saved all-or-nothing: if anything fails part-way, nothing is
-saved, so stock, sales and the ledger always stay in step. A sale is refused if
-there is not enough stock.
-
-### Stock Purchases and Profit
-Stock you buy is inventory, not an expense. When you restock, the payment is
-logged in Transactions as money out, and the cost goes into the product's
-average buy price. In Profit & Loss that cost is counted as COGS when the items
-are sold — so it is never counted twice.
-
-### P&L Calculation
-```
-Total Revenue      =  sum of all completed sales
-Total COGS         =  sum of (buy price × quantity) for all sold items
-Gross Profit       =  Total Revenue - Total COGS
-Operating Expenses =  sum of all recorded expenses
-Net Profit         =  Gross Profit - Operating Expenses
+Sales (incl. VAT)    = completed sales in the period
+− VAT collected      = VAT included in those sales (owed to RRA)
+= Net sales
+− Cost of goods sold = buy price × quantity of the items sold
+= Gross profit
+− Operating expenses = Expenses page
+± Other income / expenses typed by hand on the Transactions page
+= Net profit
 ```
 
 ---
 
-## Tech Stack
+## Tech stack
 
 | Layer | Technology |
 |-------|-----------|
-| UI Framework | React 18 + Vite |
-| Styling | Tailwind CSS v3 |
-| Desktop Shell | Tauri 2 (Rust) |
-| Database | SQLite via tauri-plugin-sql |
-| State Management | React useState / useEffect |
-| File System | tauri-plugin-fs |
-| Dialogs | tauri-plugin-dialog |
-| Testing | Vitest + better-sqlite3 |
-
-### Why Tauri over Electron?
-
-| | Tauri | Electron |
-|--|-------|---------|
-| Installer size | ~6MB | ~150MB |
-| Memory usage | ~50MB | ~200MB |
-| Language | Rust | Node.js |
-| Security | Higher | Standard |
+| UI | React 19 + Vite, Tailwind CSS 3 |
+| Desktop shell | Tauri 2 (Rust) |
+| Database | SQLite (tauri-plugin-sql), versioned migrations in `src-tauri/src/database.rs` |
+| All-or-nothing saves, backups | Rust commands in `src-tauri/src/commands.rs` |
+| Updates | tauri-plugin-updater + GitHub Releases |
+| Excel export | Built-in .xlsx writer (`src/utils/excel.js`) |
+| Tests | Vitest + better-sqlite3 (real migrations), Rust unit tests |
 
 ---
 
-## Testing
-
-Rica BizTrack has 86 automated tests covering all critical business logic.
-
-```bash
-npm run test        # watch mode
-npm run test:run    # single run
-npm run test:ui     # visual browser UI
-```
-
-### Test Coverage
-
-| Suite | Tests | What it covers |
-|-------|-------|----------------|
-| Unit | 48 | Margin, markup, cart total, profit, formatting, validation |
-| Integration | 28 | Suppliers, products, customers, sales, expenses |
-| Restock | 10 | Weighted average cost, stock movements, cash-out logging |
-| **Total** | **86** | **All passing** |
-
----
-
-## Installation
-
-### Download (Windows)
-1. Go to [Releases](https://github.com/Ricardo-Tesla/rica-bztrack/releases)
-2. Download `rica-biztrack_1.0.0_x64-setup.exe`
-3. Double click and follow the installer
-4. Launch Rica BizTrack from your desktop or Start Menu
-
-### System Requirements
-```
-OS:       Windows 10 or later (64-bit)
-RAM:      2GB minimum, 4GB recommended
-Storage:  100MB free space
-Internet: Not required
-```
-
----
-
-## Development Setup
+## Development
 
 ### Prerequisites
-```
-Node.js    18+
-Rust       latest stable
-Cargo      comes with Rust
-Microsoft C++ Build Tools (Windows)
-WebView2   pre-installed on Windows 11
-```
+- Node.js 20+ · Rust (stable) · Microsoft C++ Build Tools (Windows)
 
-### Install and Run
+### Run
 
 ```bash
-# Clone the repository
-git clone https://github.com/Ricardo-Tesla/rica-bztrack.git
-cd rica-bztrack
-
-# Install JavaScript dependencies
 npm install
-
-# Terminal 1 — start Vite dev server
-npm run dev
-
-# Terminal 2 — start Tauri
-cargo tauri dev
+npm run tauri dev          # starts Vite and the app together
 ```
 
-First run takes several minutes as Rust compiles dependencies.
-Subsequent runs are fast.
-
-### Build Installer
+### Test
 
 ```bash
-# Build the frontend
-npm run build
-
-# Build the installer
-cd src-tauri
-cargo tauri build
+npm run test:run           # 160+ JavaScript tests (services, migrations, receipts, translations)
+npm run lint
+cd src-tauri && cargo test --lib   # Rust: transactions, backups, restore checks
 ```
 
-Output:
+The translation test fails if any text is missing in Kinyarwanda or French —
+add new texts to `src/i18n/rw.js` and `src/i18n/fr.js`.
+
+### Build an installer
+
+```bash
+npm run tauri build                                              # normal installer (small)
+npm run tauri build -- --config src-tauri/tauri.offline.conf.json # offline installer (includes WebView2, ~130 MB)
 ```
-src-tauri/target/release/bundle/nsis/rica-biztrack_1.0.0_x64-setup.exe
+
+The installer is created in `src-tauri/target/release/bundle/nsis/`.
+For releases with auto-update, see [RELEASING.md](RELEASING.md).
+
+### Project structure
+
+```
+src/
+  pages/        one file per screen (POS, Sales, Products, Settings, ...)
+  services/     all database work (sales, products, customers, P&L, auth, ...)
+  components/   sidebar, shared UI, settings sections, date picker
+  context/      signed-in user, settings, language
+  i18n/         en (keys) · rw · fr
+  utils/        money/date formatting, receipts, Excel, permissions
+  tests/        unit + integration tests (use the real migrations)
+src-tauri/
+  src/database.rs   database migrations (never edit an existing one — add a new version)
+  src/commands.rs   transactions, backups, restore
+  tauri.conf.json   app, security policy, updater, installer
 ```
 
 ---
 
 ## Database
 
-Rica BizTrack uses SQLite — a single file database that requires no server.
-
-### Location
-```
-Production:  C:\Users\[name]\AppData\Roaming\com.ricabiztrack.app\rica_biztrack.db
-Development: C:\Users\[name]\.cargo\...
-```
-
-### Tables
-```
-suppliers        →  vendor information
-products         →  inventory catalog
-customers        →  customer profiles
-sales            →  sale headers
-sale_items       →  individual items per sale
-expenses         →  business expenses
-transactions     →  complete financial ledger
-stock_movements  →  restock history per product
-```
-
-### Backup and Restore
-
-**Backup:**
-Click **💾 Backup Data** in the sidebar — choose where to save.
-
-**Restore:**
-Click **♻️ Restore Backup** in the sidebar and choose a backup file.
-The file is checked, a safety copy of your current data is saved to
-`AppData\Roaming\com.ricabiztrack.app\backups\pre-restore-<time>.db`,
-and the app restarts with the restored data.
-
----
-
-## Roadmap
-
-```
-v1.1.0  →  Direct thermal printer integration
-v1.2.0  →  Tax / VAT configuration
-v1.3.0  →  Multi-currency support
-v1.4.0  →  Monthly PDF reports
-v2.0.0  →  Multi-user accounts
-v2.1.0  →  Mobile companion app
-```
-
----
-
-## Contributing
-
-Contributions are welcome. Please open an issue first to discuss
-what you would like to change.
-
-```bash
-# Fork the repository
-# Create your feature branch
-git checkout -b feature/your-feature
-
-# Commit your changes
-git commit -m "Add your feature"
-
-# Push and open a pull request
-git push origin feature/your-feature
-```
-
-Please make sure all tests pass before submitting:
-
-```bash
-npm run test:run
-```
+- Location (Windows): `%APPDATA%\com.ricabiztrack.app\rica_biztrack.db`
+- Automatic backups: `Documents\Rica BizTrack Backups` (or the folder chosen in Settings)
+- Safety copies made before a restore: `%APPDATA%\com.ricabiztrack.app\backups\`
+- Log file (for support): `%LOCALAPPDATA%\com.ricabiztrack.app\logs\`
 
 ---
 
 ## License
 
-MIT © 2025 Ricardo Tesla
-
----
+MIT License — free to use, modify and distribute.
 
 ## Author
 
 **Ricardo Tesla**
-- GitHub: [@Ricardo-Tesla](https://github.com/Ricardo-Tesla)
-
----
-
-*Built with ❤️ for small businesses in Rwanda 🇷🇼*

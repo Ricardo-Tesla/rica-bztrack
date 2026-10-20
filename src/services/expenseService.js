@@ -1,25 +1,26 @@
 import { getDb, runTransaction, ref } from './db'
+import { currentUserName } from '../utils/session'
+import { t } from '../i18n'
 
-// Categories offered when adding an expense.
-// "Stock Purchase" is intentionally not here: buying stock is recorded with
-// Products → Restock, and its cost is counted as COGS when the items sell.
-// Adding it here as well would count the same money twice.
-const EXPENSE_CATEGORIES = [
-  'Rent', 'Salary', 'Utilities', 'Marketing',
-  'Transport', 'Maintenance', 'Other'
-]
+import { EXPENSE_CATEGORIES } from '../utils/constants'
 
 export { EXPENSE_CATEGORIES }
 
-// Get all expenses (with the payment method from the linked transaction)
-export async function getExpenses() {
+// Expenses between two dates (YYYY-MM-DD, inclusive), with the payment method
+// from the linked transaction. No dates = all.
+export async function getExpenses({ from = null, to = null } = {}) {
   const db = await getDb()
+  const where = []
+  const params = []
+  if (from) { where.push('e.date >= ?'); params.push(from) }
+  if (to) { where.push('e.date <= ?'); params.push(to) }
   return await db.select(`
     SELECT e.*, t.payment_method
     FROM expenses e
     LEFT JOIN transactions t ON t.reference_type = 'expense' AND t.reference_id = e.id
+    ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
     ORDER BY e.date DESC, e.id DESC
-  `)
+  `, params)
 }
 
 export function buildAddExpenseStatements(expense) {
@@ -27,15 +28,15 @@ export function buildAddExpenseStatements(expense) {
   return [
     // 0 — the expense
     {
-      sql: `INSERT INTO expenses (description, category, amount, date)
-            VALUES (?, ?, ?, ?)`,
-      params: [expense.description, expense.category, amount, expense.date],
+      sql: `INSERT INTO expenses (description, category, amount, date, user_name)
+            VALUES (?, ?, ?, ?, ?)`,
+      params: [expense.description, expense.category, amount, expense.date, currentUserName()],
     },
     // 1 — matching ledger entry
     {
       sql: `INSERT INTO transactions
-            (description, type, category, amount, payment_method, reference_id, reference_type, date)
-            VALUES (?, 'expense', ?, ?, ?, ?, 'expense', ?)`,
+            (description, type, category, amount, payment_method, reference_id, reference_type, date, user_name)
+            VALUES (?, 'expense', ?, ?, ?, ?, 'expense', ?, ?)`,
       params: [
         expense.description,
         expense.category,
@@ -43,6 +44,7 @@ export function buildAddExpenseStatements(expense) {
         expense.payment_method || 'Cash',
         ref(0),
         expense.date,
+        currentUserName(),
       ],
     },
   ]
@@ -56,7 +58,7 @@ export function buildUpdateExpenseStatements(id, expense) {
       sql: `UPDATE expenses SET description = ?, category = ?, amount = ?, date = ? WHERE id = ?`,
       params: [expense.description, expense.category, amount, expense.date, id],
       expectChanges: 1,
-      errorMessage: 'This expense no longer exists.',
+      errorMessage: t('This expense no longer exists.'),
     },
     {
       sql: `UPDATE transactions SET description = ?, category = ?, amount = ?, payment_method = ?, date = ?

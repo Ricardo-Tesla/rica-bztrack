@@ -161,6 +161,110 @@ pub async fn backup_database(
     Ok(destination)
 }
 
+const AUTO_PREFIX: &str = "rica_biztrack_auto_";
+
+/// Where automatic backups go when no folder is chosen:
+/// Documents\Rica BizTrack Backups (or the app data folder if there is no Documents).
+fn resolve_backup_folder(app: &AppHandle, folder: Option<String>) -> Result<PathBuf, String> {
+    let dir = match folder.filter(|f| !f.trim().is_empty()) {
+        Some(f) => PathBuf::from(f),
+        None => match app.path().document_dir() {
+            Ok(d) => d.join("Rica BizTrack Backups"),
+            Err(_) => app
+                .path()
+                .app_data_dir()
+                .map_err(|e| e.to_string())?
+                .join("backups"),
+        },
+    };
+    std::fs::create_dir_all(&dir).map_err(|e| format!("Could not create backup folder: {e}"))?;
+    Ok(dir)
+}
+
+#[tauri::command]
+pub fn default_backup_folder(app: AppHandle) -> Result<String, String> {
+    Ok(resolve_backup_folder(&app, None)?.to_string_lossy().to_string())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupFile {
+    name: String,
+    path: String,
+    size: u64,
+}
+
+fn auto_backups_in(dir: &Path) -> Vec<PathBuf> {
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| {
+                    p.file_name()
+                        .and_then(|n| n.to_str())
+                        .map(|n| n.starts_with(AUTO_PREFIX) && n.ends_with(".db"))
+                        .unwrap_or(false)
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    // Names contain the date (YYYY-MM-DD), so sorting by name sorts by date
+    files.sort();
+    files.reverse();
+    files
+}
+
+/// Daily automatic backup. `date` is today's LOCAL date (YYYY-MM-DD) from the app.
+/// Does nothing if today's backup already exists. Keeps the newest `keep` files.
+async fn auto_backup_into(pool: &Pool<Sqlite>, dir: &Path, date: &str, keep: usize) -> Result<String, String> {
+    if date.len() != 10 || !date.chars().all(|c| c.is_ascii_digit() || c == '-') {
+        return Err("Invalid date".into());
+    }
+    let target = dir.join(format!("{AUTO_PREFIX}{date}.db"));
+    if !target.exists() {
+        snapshot_to(pool, &target).await?;
+    }
+    for old in auto_backups_in(dir).into_iter().skip(keep.max(1)) {
+        let _ = std::fs::remove_file(old);
+    }
+    Ok(target.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub async fn auto_backup(
+    app: AppHandle,
+    instances: State<'_, DbInstances>,
+    folder: Option<String>,
+    date: String,
+    keep: u32,
+) -> Result<String, String> {
+    let pool = get_pool(&instances).await?;
+    let dir = resolve_backup_folder(&app, folder)?;
+    auto_backup_into(&pool, &dir, &date, keep as usize).await
+}
+
+#[tauri::command]
+pub fn list_auto_backups(app: AppHandle, folder: Option<String>) -> Result<Vec<BackupFile>, String> {
+    let dir = resolve_backup_folder(&app, folder)?;
+    Ok(auto_backups_in(&dir)
+        .into_iter()
+        .map(|p| BackupFile {
+            name: p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+            size: std::fs::metadata(&p).map(|m| m.len()).unwrap_or(0),
+            path: p.to_string_lossy().to_string(),
+        })
+        .collect())
+}
+
+/// Folder that holds the log file (shown in Settings → About for support)
+#[tauri::command]
+pub fn log_folder(app: AppHandle) -> Result<String, String> {
+    app.path()
+        .app_log_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .map_err(|e| e.to_string())
+}
+
 /// Check that a file is a healthy Rica BizTrack database.
 async fn validate_backup(path: &Path) -> Result<(), String> {
     let invalid = "This file is not a valid Rica BizTrack backup.";
@@ -355,6 +459,34 @@ mod tests {
             let mut conn = SqliteConnection::connect_with(&opts).await.unwrap();
             let n: i64 = sqlx::query("SELECT COUNT(*) FROM products").fetch_one(&mut conn).await.unwrap().get(0);
             assert_eq!(n, 1);
+        });
+    }
+
+    #[test]
+    fn auto_backup_runs_once_per_day_and_keeps_the_newest() {
+        tauri::async_runtime::block_on(async {
+            let dir = temp_dir("auto");
+            let pool = test_pool(&dir.join("live.db")).await;
+            let backups = dir.join("backups");
+            std::fs::create_dir_all(&backups).unwrap();
+
+            for day in ["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"] {
+                auto_backup_into(&pool, &backups, day, 3).await.unwrap();
+            }
+            // Same day again: no new file
+            auto_backup_into(&pool, &backups, "2026-10-04", 3).await.unwrap();
+
+            let names: Vec<String> = auto_backups_in(&backups)
+                .iter()
+                .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+                .collect();
+            assert_eq!(names, vec![
+                "rica_biztrack_auto_2026-10-04.db",
+                "rica_biztrack_auto_2026-10-03.db",
+                "rica_biztrack_auto_2026-10-02.db",
+            ]);
+            validate_backup(&backups.join("rica_biztrack_auto_2026-10-04.db")).await.unwrap();
+            assert!(auto_backup_into(&pool, &backups, "../../evil", 3).await.is_err());
         });
     }
 

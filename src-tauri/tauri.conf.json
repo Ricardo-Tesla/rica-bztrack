@@ -14,7 +14,7 @@
         "title": "Rica BizTrack",
         "width": 1280,
         "height": 800,
-        "minWidth": 1024,
+        "minWidth": 1100,
         "minHeight": 700,
         "resizable": true,
         "fullscreen": false,
@@ -28,12 +28,25 @@
   },
   "plugins": {
     "sql": {
-      "preload": ["sqlite:rica_biztrack.db"]
+      "preload": [
+        "sqlite:rica_biztrack.db"
+      ]
+    },
+    "updater": {
+      "pubkey": "REPLACE_WITH_THE_CONTENT_OF_rica-biztrack.key.pub",
+      "endpoints": [
+        "https://github.com/Ricardo-Tesla/rica-bztrack/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -42,12 +55,25 @@
       "icons/icon.ico"
     ],
     "windows": {
-      "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": ""
+      "certificateThumbprint": null,
+      "timestampUrl": "",
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": [
+          "English",
+          "French"
+        ],
+        "displayLanguageSelector": true
+      }
     },
     "shortDescription": "Business management for small businesses",
     "longDescription": "Rica BizTrack is a complete business management solution for small businesses. Manage inventory, sales, customers, expenses and generate profit and loss reports.",
-    "publisher": "Ricardo Tesla"
+    "publisher": "Ricardo Tesla",
+    "copyright": "© Ricardo Tesla",
+    "category": "Business"
   }
 }

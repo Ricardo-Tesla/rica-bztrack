@@ -1,11 +1,16 @@
 import { getDb, runTransaction } from './db'
-import { todayLocal } from '../utils/format'
+import { todayLocal, roundQty } from '../utils/format'
+import { currentUserName } from '../utils/session'
+import { t } from '../i18n'
 
-// parseInt that keeps 0 (e.g. a low-stock alert of 0) instead of replacing it
-function toInt(value, fallback) {
-  const n = parseInt(value)
-  return Number.isNaN(n) ? fallback : n
+// Stock can be a decimal for kg / litre products. Keeps 0 (e.g. a low-stock
+// alert of 0) instead of replacing it with the default.
+function toQty(value, fallback) {
+  const n = parseFloat(value)
+  return Number.isNaN(n) ? fallback : roundQty(n)
 }
+
+const clean = v => (String(v ?? '').trim() || null)
 
 // Get all active products with supplier name joined (archived ones are hidden)
 export async function getProducts() {
@@ -24,8 +29,8 @@ export async function addProduct(product) {
   const db = await getDb()
   await db.execute(
     `INSERT INTO products
-     (name, sku, category, unit, buy_price, sell_price, stock, low_stock_alert, supplier_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     (name, sku, category, unit, buy_price, sell_price, stock, low_stock_alert, supplier_id, barcode, vat_exempt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       product.name,
       product.sku,
@@ -33,9 +38,11 @@ export async function addProduct(product) {
       product.unit || null,
       parseFloat(product.buy_price) || 0,
       parseFloat(product.sell_price) || 0,
-      toInt(product.stock, 0),
-      toInt(product.low_stock_alert, 5),
+      toQty(product.stock, 0),
+      toQty(product.low_stock_alert, 5),
       product.supplier_id || null,
+      clean(product.barcode),
+      product.vat_exempt ? 1 : 0,
     ]
   )
 }
@@ -45,8 +52,8 @@ export async function addProduct(product) {
 // happened meanwhile, the update is refused instead of overwriting the stock.
 // A changed stock number is recorded in the stock history as an adjustment.
 export function buildUpdateProductStatements(id, product, originalStock) {
-  const newStock = toInt(product.stock, 0)
-  const oldStock = toInt(originalStock, 0)
+  const newStock = toQty(product.stock, 0)
+  const oldStock = toQty(originalStock, 0)
   const buyPrice = parseFloat(product.buy_price) || 0
 
   const statements = [
@@ -54,8 +61,8 @@ export function buildUpdateProductStatements(id, product, originalStock) {
       sql: `UPDATE products SET
             name = ?, sku = ?, category = ?, unit = ?,
             buy_price = ?, sell_price = ?, stock = ?,
-            low_stock_alert = ?, supplier_id = ?
-            WHERE id = ? AND stock = ?`,
+            low_stock_alert = ?, supplier_id = ?, barcode = ?, vat_exempt = ?
+            WHERE id = ? AND ABS(stock - ?) < 0.0005`,
       params: [
         product.name,
         product.sku,
@@ -64,23 +71,25 @@ export function buildUpdateProductStatements(id, product, originalStock) {
         buyPrice,
         parseFloat(product.sell_price) || 0,
         newStock,
-        toInt(product.low_stock_alert, 5),
+        toQty(product.low_stock_alert, 5),
         product.supplier_id || null,
+        clean(product.barcode),
+        product.vat_exempt ? 1 : 0,
         id,
         oldStock,
       ],
       expectChanges: 1,
-      errorMessage: 'The stock changed while you were editing (probably a sale). Close this window, reopen the product and try again.',
+      errorMessage: t('The stock changed while you were editing (probably a sale). Close this window, reopen the product and try again.'),
     },
   ]
 
-  const diff = newStock - oldStock
+  const diff = roundQty(newStock - oldStock)
   if (diff !== 0) {
     statements.push({
       sql: `INSERT INTO stock_movements
-            (product_id, product_name, type, quantity, unit_cost, total_cost, note, date)
-            VALUES (?, ?, 'adjustment', ?, ?, 0, ?, ?)`,
-      params: [id, product.name, diff, buyPrice, `Stock corrected from ${oldStock} to ${newStock}`, todayLocal()],
+            (product_id, product_name, type, quantity, unit_cost, total_cost, note, date, user_name)
+            VALUES (?, ?, 'adjustment', ?, ?, 0, ?, ?, ?)`,
+      params: [id, product.name, diff, buyPrice, `Stock corrected from ${oldStock} to ${newStock}`, todayLocal(), currentUserName()],
     })
   }
 
@@ -114,4 +123,13 @@ export function buildDeleteProductStatements(id) {
 export async function deleteProduct(id) {
   const results = await runTransaction(buildDeleteProductStatements(id))
   return results[0].rowsAffected > 0 ? 'archived' : 'deleted'
+}
+
+// Product with this exact barcode or SKU (for barcode scanners at the till)
+export function findByCode(products, code) {
+  const c = String(code || '').trim().toLowerCase()
+  if (!c) return null
+  return products.find(p => (p.barcode || '').toLowerCase() === c)
+    || products.find(p => (p.sku || '').toLowerCase() === c)
+    || null
 }

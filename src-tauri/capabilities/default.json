@@ -2,12 +2,18 @@
   "identifier": "default",
   "description": "Permissions for the main window. Keep this list as short as possible.",
   "local": true,
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "sql:default",
     "sql:allow-execute",
     "dialog:default",
-    "fs:allow-write-text-file"
+    "fs:allow-write-text-file",
+    "fs:allow-write-file",
+    "log:default",
+    "process:allow-restart",
+    "updater:default"
   ]
 }

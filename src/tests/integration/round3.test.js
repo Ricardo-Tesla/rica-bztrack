@@ -12,7 +12,7 @@ describe('Void a sale', () => {
     pid = Number(db.prepare(
       `INSERT INTO products (name, sku, buy_price, sell_price, stock) VALUES ('Rice', 'R1', 600, 1000, 10)`
     ).run().lastInsertRowid)
-    const result = await completeSale([{ id: pid, name: 'Rice', sell_price: 1000, quantity: 3 }], null, 'Mobile Money', run)
+    const result = await completeSale([{ id: pid, name: 'Rice', sell_price: 1000, quantity: 3 }], { customer: null, paymentMethod: 'Mobile Money' }, run)
     sale = db.prepare('SELECT * FROM sales WHERE id = ?').get(result.saleId)
     sale.items = db.prepare('SELECT * FROM sale_items WHERE sale_id = ?').all(sale.id)
   })

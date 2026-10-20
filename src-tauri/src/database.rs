@@ -202,5 +202,74 @@ pub fn get_migrations() -> Vec<Migration> {
             ",
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 11,
+            description: "production_settings_users_credit_vat",
+            // - settings: shop details, VAT, language, backups...
+            // - users: owner / cashier accounts with a hashed PIN
+            // - customer_payments: repayments of credit sales (ideni)
+            // - sales: amount paid (credit), payment reference (MoMo), EBM number,
+            //   who sold / voided it
+            // - products: barcode and VAT-exempt flag; customers: TIN
+            // - who recorded expenses, transactions and stock movements
+            sql: "
+                CREATE TABLE IF NOT EXISTS settings (
+                    key   TEXT PRIMARY KEY,
+                    value TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS users (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name        TEXT NOT NULL,
+                    role        TEXT NOT NULL CHECK (role IN ('owner', 'cashier')),
+                    pin_hash    TEXT NOT NULL,
+                    pin_salt    TEXT NOT NULL,
+                    active      INTEGER NOT NULL DEFAULT 1,
+                    last_login  TEXT,
+                    created_at  TEXT DEFAULT (datetime('now'))
+                );
+
+                CREATE TABLE IF NOT EXISTS customer_payments (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    customer_id     INTEGER NOT NULL,
+                    amount          REAL NOT NULL,
+                    payment_method  TEXT DEFAULT 'Cash',
+                    reference       TEXT,
+                    note            TEXT,
+                    date            TEXT NOT NULL,
+                    voided          INTEGER NOT NULL DEFAULT 0,
+                    user_name       TEXT,
+                    created_at      TEXT DEFAULT (datetime('now')),
+                    FOREIGN KEY (customer_id) REFERENCES customers(id)
+                );
+
+                ALTER TABLE sales ADD COLUMN amount_paid REAL;
+                ALTER TABLE sales ADD COLUMN payment_reference TEXT;
+                ALTER TABLE sales ADD COLUMN ebm_receipt_no TEXT;
+                ALTER TABLE sales ADD COLUMN user_name TEXT;
+                ALTER TABLE sales ADD COLUMN voided_at TEXT;
+                ALTER TABLE sales ADD COLUMN voided_by TEXT;
+                ALTER TABLE sales ADD COLUMN void_reason TEXT;
+                UPDATE sales SET amount_paid = total WHERE amount_paid IS NULL;
+
+                ALTER TABLE sale_items ADD COLUMN vat_rate REAL NOT NULL DEFAULT 0;
+
+                ALTER TABLE products ADD COLUMN barcode TEXT;
+                ALTER TABLE products ADD COLUMN vat_exempt INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE customers ADD COLUMN tin TEXT;
+
+                ALTER TABLE expenses ADD COLUMN user_name TEXT;
+                ALTER TABLE transactions ADD COLUMN user_name TEXT;
+                ALTER TABLE stock_movements ADD COLUMN user_name TEXT;
+
+                CREATE INDEX IF NOT EXISTS idx_sales_created ON sales(created_at);
+                CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);
+                CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)
+                    WHERE barcode IS NOT NULL AND barcode <> '' AND archived = 0;
+                CREATE INDEX IF NOT EXISTS idx_customer_payments_customer ON customer_payments(customer_id);
+            ",
+            kind: MigrationKind::Up,
+        },
     ]
 }

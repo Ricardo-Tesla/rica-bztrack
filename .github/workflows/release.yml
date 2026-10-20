@@ -1,0 +1,55 @@
+# Builds the Windows installer and publishes it as a GitHub Release, together
+# with the file the app's auto-updater reads (latest.json).
+#
+# How to release a new version:
+#   1. Change "version" in src-tauri/tauri.conf.json and package.json (e.g. 1.0.1)
+#   2. Commit, then create and push a tag:   git tag v1.0.1  &&  git push origin v1.0.1
+#   3. When this workflow finishes, open GitHub → Releases, check the draft, and click "Publish".
+#      Shops get the update the next time the owner opens the app while online.
+#
+# One-time setup (see RELEASING.md): add these repository secrets
+#   TAURI_SIGNING_PRIVATE_KEY           — content of your rica-biztrack.key file
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  — the password you chose for it
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+      - run: npm run test:run
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: v__VERSION__
+          releaseName: Rica BizTrack v__VERSION__
+          releaseBody: See the changes below. Download the "-setup.exe" file to install.
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+          args: --config src-tauri/tauri.release.conf.json
