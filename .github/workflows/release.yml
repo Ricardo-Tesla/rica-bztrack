@@ -48,7 +48,7 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: Rica BizTrack v__VERSION__
-          releaseBody: See the changes below. Download the "-setup.exe" file to install.
+          releaseBody: New version of Rica BizTrack with improvements and fixes. Your data is kept.
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
